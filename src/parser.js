@@ -7,6 +7,19 @@ function slugify(text) {
   return slug || 'unknown'
 }
 
+// Piracy release groups (TamilMV, TamilBlasters, MovieRulz, TamilRockers, ...) prepend their
+// site domain as a fake title, e.g. "www.1TamilMV.wtf - Real Movie Name (2024)...". PTT has no
+// way to know this isn't the title, so strip it before parsing.
+const SITE_PREFIX_RE = /^www\.\S+?\s*[-–—]\s*/i
+
+function stripSitePrefixes(name) {
+  let cleaned = name
+  while (SITE_PREFIX_RE.test(cleaned)) {
+    cleaned = cleaned.replace(SITE_PREFIX_RE, '')
+  }
+  return cleaned
+}
+
 /** Yield one work item per video file in a torbox/webdl mylist entry. */
 function* parseWorkItems(source, entry) {
   const itemId = entry.id
@@ -16,7 +29,7 @@ function* parseWorkItems(source, entry) {
     if (!isVideo(name)) continue
     if ((f.size || 0) < MIN_FILE_SIZE_BYTES) continue
 
-    const guess = PTT.parse(name)
+    const guess = PTT.parse(stripSitePrefixes(name))
     const title = guess.title
     if (!title) continue
 
