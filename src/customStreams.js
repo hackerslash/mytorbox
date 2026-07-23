@@ -1,11 +1,14 @@
 const crypto = require('crypto')
 const redis = require('./redisClient')
 const { slugify } = require('./parser')
+const validators = require('./validators')
 const {
   CUSTOM_STREAM_DEFAULT_TTL_MS,
   CUSTOM_STREAM_MIN_TTL_MS,
   CUSTOM_STREAM_MAX_TTL_MS,
   MAX_CUSTOM_STREAMS_PER_KEY,
+  MAX_STREAM_URL_LENGTH,
+  CUSTOM_STREAM_VERIFY_TTL_SECONDS,
 } = require('./config')
 
 function clampTtlMs(ttlMs) {
@@ -30,7 +33,22 @@ function isValidImdbId(id) {
 }
 
 function isValidStreamUrl(url) {
-  return typeof url === 'string' && /^https?:\/\/.+/i.test(url)
+  return typeof url === 'string' && url.length <= MAX_STREAM_URL_LENGTH && /^https?:\/\/.+/i.test(url)
+}
+
+
+async function isVerifiedUser(uKey, torboxKey, tmdbKey) {
+  const vKey = `cs:verified:${uKey}`
+  const cached = await redis.get(vKey)
+  if (cached === '1') return true
+
+  const [torbox, tmdbCheck] = await Promise.all([
+    validators.checkTorbox(torboxKey),
+    validators.checkTmdb(tmdbKey),
+  ])
+  const ok = torbox.valid && tmdbCheck.valid
+  if (ok) await redis.set(vKey, '1', 'EX', CUSTOM_STREAM_VERIFY_TTL_SECONDS)
+  return ok
 }
 
 // Entries without an IMDb id (content TorBox/TMDB has no listing for) still need a stable
@@ -46,6 +64,8 @@ async function addCustomStream(torboxKey, tmdbKey, rpdbKey, entry) {
   const idx = idxKey(uKey)
 
   try {
+    if (!(await isVerifiedUser(uKey, torboxKey, tmdbKey))) return null
+
     const now = Date.now()
     await redis.zremrangebyscore(idx, 0, now)
     const count = await redis.zcard(idx)

@@ -213,7 +213,7 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey) {
 
 // Falls back to this in-process Map only when Redis isn't configured (e.g. local dev without REDIS_URL).
 const memCache = new Map() // sha256(`${torboxKey}|${tmdbKey}|${rpdbKey}`) -> { lib, cachedAt }
-let buildLock = Promise.resolve()
+const buildLocks = new Map()
 
 // Redis/memory keys are hashed rather than built from the raw keys directly —
 // otherwise anyone with Redis access could read every user's API keys straight
@@ -263,7 +263,8 @@ async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
     if (cached) return cached
   }
 
-  const run = buildLock.then(async () => {
+  const prevLock = buildLocks.get(cacheKey) || Promise.resolve()
+  const run = prevLock.then(async () => {
     if (!force) {
       const cachedAfterWait = await getCachedLib(cacheKey)
       if (cachedAfterWait) return cachedAfterWait
@@ -272,7 +273,11 @@ async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
     await setCachedLib(cacheKey, lib)
     return lib
   })
-  buildLock = run.catch(() => {})
+  const settled = run.then(() => {}, () => {})
+  buildLocks.set(cacheKey, settled)
+  settled.finally(() => {
+    if (buildLocks.get(cacheKey) === settled) buildLocks.delete(cacheKey)
+  })
   return run
 }
 

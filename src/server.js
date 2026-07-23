@@ -7,7 +7,9 @@ const validators = require('./validators')
 const library = require('./library')
 const tmdb = require('./tmdb')
 const customStreams = require('./customStreams')
-const { CUSTOM_STREAM_MIN_TTL_MS, CUSTOM_STREAM_MAX_TTL_MS, CUSTOM_STREAM_DEFAULT_TTL_MS } = require('./config')
+const config = require('./config')
+const { rateLimit } = require('./rateLimit')
+const { CUSTOM_STREAM_MIN_TTL_MS, CUSTOM_STREAM_MAX_TTL_MS, CUSTOM_STREAM_DEFAULT_TTL_MS, RATE_LIMITS } = config
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public')
 const LOGO_PATH = path.join(PUBLIC_DIR, 'logo.png')
@@ -38,6 +40,7 @@ function decodeConfigParam(raw) {
 }
 
 const app = express()
+app.set('trust proxy', true) // needed for correct req.ip behind Vercel/reverse proxies, used by rate limiting
 app.use(cors())
 app.use(express.json())
 
@@ -58,7 +61,7 @@ app.get('/:config/configure', (req, res) => {
   res.type('html').send(configurePage(cfg.torbox_key || '', cfg.tmdb_key || '', cfg.rpdb_key || ''))
 })
 
-app.post('/api/validate', async (req, res) => {
+app.post('/api/validate', rateLimit('validate', RATE_LIMITS.validate), async (req, res) => {
   const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey } = req.body || {}
   const [torbox, tmdb, rpdb] = await Promise.all([
     validators.checkTorbox(torboxKey),
@@ -68,7 +71,11 @@ app.post('/api/validate', async (req, res) => {
   res.json({ torbox, tmdb, rpdb })
 })
 
-app.post('/api/cache/clear', async (req, res) => {
+app.post('/api/cache/clear', rateLimit('cacheClear', RATE_LIMITS.cacheClear), async (req, res) => {
+  if (!config.ADMIN_SECRET || req.get('x-admin-secret') !== config.ADMIN_SECRET) {
+    res.status(401).json({ ok: false, error: 'unauthorized' })
+    return
+  }
   await library.clearCache()
   tmdb.clearCache()
   res.json({ cleared: true })
@@ -96,7 +103,7 @@ async function enrichEntry(e, tmdbKey, rpdbKey) {
   return { ...toPublicEntry(e), name, poster }
 }
 
-app.post('/api/custom-streams/list', async (req, res) => {
+app.post('/api/custom-streams/list', rateLimit('customStreamRead', RATE_LIMITS.customStreamRead), async (req, res) => {
   const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey } = req.body || {}
   if (!torboxKey || !tmdbKey) {
     return res.status(400).json({ ok: false, error: 'torbox_key and tmdb_key are required' })
@@ -106,7 +113,7 @@ app.post('/api/custom-streams/list', async (req, res) => {
   res.json({ ok: true, entries: enriched })
 })
 
-app.post('/api/custom-streams/add', async (req, res) => {
+app.post('/api/custom-streams/add', rateLimit('customStreamWrite', RATE_LIMITS.customStreamWrite), async (req, res) => {
   const {
     torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey,
     type, imdb_id: imdbId, season, episode, stream_url: streamUrl, title, ttl_seconds: ttlSeconds,
@@ -162,7 +169,7 @@ app.post('/api/custom-streams/add', async (req, res) => {
   res.json({ ok: true, entry: toPublicEntry(entry) })
 })
 
-app.post('/api/custom-streams/remove', async (req, res) => {
+app.post('/api/custom-streams/remove', rateLimit('customStreamRead', RATE_LIMITS.customStreamRead), async (req, res) => {
   const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey, id } = req.body || {}
   if (!torboxKey || !tmdbKey || !id) {
     return res.status(400).json({ ok: false, error: 'torbox_key, tmdb_key, and id are required' })
@@ -179,19 +186,27 @@ app.get('/logo.png', (req, res) => {
   res.sendFile(LOGO_PATH)
 })
 
-// --- Stremio addon protocol (manifest/catalog/meta/stream) ---
-// Hand-rolled instead of stremio-addon-sdk's router: the SDK silently deletes
-// behaviorHints.configurable/configurationRequired from any manifest fetched
-// through a URL that already has a :config segment (its own getRouter.js),
-// which is exactly the URL this addon's install links use. We want manifest.js
-// served byte-for-byte as defined in addon.js, always.
+
 
 function stripJsonExt(s) {
   return s.endsWith('.json') ? s.slice(0, -5) : s
 }
 
+// Only gates the no-:config fallback to DEFAULT_* env keys — a :config URL already carries its
+// own credentials. Off by default (preserves existing behavior); set ADDON_ACCESS_TOKEN to stop
+// anyone with the bare addon URL from browsing/streaming through your own TorBox account.
+function defaultAccessAllowed(req, cfg) {
+  if (cfg) return true
+  if (!addon.HAS_DEFAULTS || !config.ADDON_ACCESS_TOKEN) return true
+  return req.query.token === config.ADDON_ACCESS_TOKEN
+}
+
 function manifestHandler(req, res) {
   const cfg = req.params.config ? decodeConfigParam(req.params.config) : null
+  if (!defaultAccessAllowed(req, cfg)) {
+    res.status(401).json({ err: 'unauthorized' })
+    return
+  }
   res.type('application/json').send(JSON.stringify(addon.manifestFor(cfg)))
 }
 
@@ -200,6 +215,10 @@ app.get('/:config/manifest.json', manifestHandler)
 
 async function catalogHandler(req, res) {
   const cfg = req.params.config ? decodeConfigParam(req.params.config) : null
+  if (!defaultAccessAllowed(req, cfg)) {
+    res.status(401).json({ err: 'unauthorized' })
+    return
+  }
   const type = req.params.type
   const id = stripJsonExt(req.params.idWithExt)
   try {
@@ -213,6 +232,10 @@ async function catalogHandler(req, res) {
 
 async function metaHandler(req, res) {
   const cfg = req.params.config ? decodeConfigParam(req.params.config) : null
+  if (!defaultAccessAllowed(req, cfg)) {
+    res.status(401).json({ err: 'unauthorized' })
+    return
+  }
   const type = req.params.type
   const id = stripJsonExt(req.params.idWithExt)
   try {
@@ -230,6 +253,10 @@ async function metaHandler(req, res) {
 
 async function streamHandler(req, res) {
   const cfg = req.params.config ? decodeConfigParam(req.params.config) : null
+  if (!defaultAccessAllowed(req, cfg)) {
+    res.status(401).json({ err: 'unauthorized' })
+    return
+  }
   const type = req.params.type
   const id = stripJsonExt(req.params.idWithExt)
   try {
