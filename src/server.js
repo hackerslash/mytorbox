@@ -176,7 +176,8 @@ function stripJsonExt(s) {
 }
 
 function manifestHandler(req, res) {
-  res.type('application/json').send(JSON.stringify(addon.manifest))
+  const cfg = req.params.config ? decodeConfigParam(req.params.config) : null
+  res.type('application/json').send(JSON.stringify(addon.manifestFor(cfg)))
 }
 
 app.get('/manifest.json', manifestHandler)

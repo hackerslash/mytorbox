@@ -102,4 +102,14 @@ async function getStream({ type, id, config: cfg }) {
   return { streams }
 }
 
-module.exports = { manifest, HAS_DEFAULTS, getCatalog, getMeta, getStream }
+function manifestFor(cfg) {
+  return {
+    ...manifest,
+    behaviorHints: {
+      ...manifest.behaviorHints,
+      configurationRequired: !resolveKeys(cfg),
+    },
+  }
+}
+
+module.exports = { manifest, manifestFor, resolveKeys, HAS_DEFAULTS, getCatalog, getMeta, getStream }
