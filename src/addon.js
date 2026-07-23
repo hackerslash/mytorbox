@@ -1,5 +1,5 @@
 const config = require('./config')
-const { getLibrary } = require('./library')
+const { getLibrary, hydrateStreams } = require('./library')
 const { buildCustomCatalog } = require('./customCatalog')
 
 const HAS_DEFAULTS = Boolean(config.DEFAULT_TORBOX_API_KEY && config.DEFAULT_TMDB_API_KEY)
@@ -97,9 +97,9 @@ async function getStream({ type, id, config: cfg }) {
   }
 
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
-  const streams = lib.streams[id]
-  if (!streams) return null
-  return { streams }
+  const entries = lib.streams[id]
+  if (!entries) return null
+  return { streams: hydrateStreams(entries, keys.torboxKey) }
 }
 
 function manifestFor(cfg) {

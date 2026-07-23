@@ -1,3 +1,4 @@
+const crypto = require('crypto')
 const { SOURCES, fetchMylist, buildStreamUrl } = require('./torbox')
 const { parseWorkItems, slugify } = require('./parser')
 const tmdb = require('./tmdb')
@@ -7,15 +8,27 @@ const { LIBRARY_TTL_MS } = require('./config')
 
 const TMDB_CONCURRENCY = 5
 
-function streamDict(w, torboxKey) {
-  const url = buildStreamUrl(w.source, w.itemId, w.fileId, torboxKey)
+// Cached streams keep only what's needed to rebuild the download URL later —
+// never the raw TorBox key, since this object is what gets persisted to Redis.
+function streamEntry(w) {
   const sizeGb = (w.size || 0) / 1024 ** 3
   return {
-    url,
+    source: w.source,
+    itemId: w.itemId,
+    fileId: w.fileId,
     name: 'TorBox',
     title: `${w.filename}\n${sizeGb.toFixed(2)} GB`,
     behaviorHints: { bingeGroup: `torbox-${w.itemId}` },
   }
+}
+
+function hydrateStreams(entries, torboxKey) {
+  return entries.map((e) => ({
+    url: buildStreamUrl(e.source, e.itemId, e.fileId, torboxKey),
+    name: e.name,
+    title: e.title,
+    behaviorHints: e.behaviorHints,
+  }))
 }
 
 function posterUrlFor(tmdbRes, kind, rpdbKey) {
@@ -156,7 +169,7 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey) {
     if (logo) preview.logo = logo
     lib.movies.push(preview)
     lib.meta[mid] = { ...preview, description: tmdbRes ? tmdbRes.overview : null }
-    lib.streams[mid] = sortedBySize(g.items).map((w) => streamDict(w, torboxKey))
+    lib.streams[mid] = sortedBySize(g.items).map(streamEntry)
   })
 
   seriesMerged.forEach(([canonical, g, tmdbRes], i) => {
@@ -188,7 +201,7 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey) {
         season,
         episode,
       })
-      lib.streams[vid] = sortedBySize(items).map((w) => streamDict(w, torboxKey))
+      lib.streams[vid] = sortedBySize(items).map(streamEntry)
     }
 
     lib.series.push(preview)
@@ -199,8 +212,15 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey) {
 }
 
 // Falls back to this in-process Map only when Redis isn't configured (e.g. local dev without REDIS_URL).
-const memCache = new Map() // `${torboxKey}|${tmdbKey}|${rpdbKey}` -> { lib, cachedAt }
+const memCache = new Map() // sha256(`${torboxKey}|${tmdbKey}|${rpdbKey}`) -> { lib, cachedAt }
 let buildLock = Promise.resolve()
+
+// Redis/memory keys are hashed rather than built from the raw keys directly —
+// otherwise anyone with Redis access could read every user's API keys straight
+// out of the key names (`redis-cli KEYS lib:*`, MONITOR, RDB backups, etc).
+function cacheKeyFor(torboxKey, tmdbKey, rpdbKey) {
+  return crypto.createHash('sha256').update(`${torboxKey}|${tmdbKey}|${rpdbKey || ''}`).digest('hex')
+}
 
 const LIBRARY_TTL_SECONDS = Math.floor(LIBRARY_TTL_MS / 1000)
 
@@ -236,7 +256,7 @@ async function setCachedLib(cacheKey, lib) {
 }
 
 async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
-  const cacheKey = `${torboxKey}|${tmdbKey}|${rpdbKey || ''}`
+  const cacheKey = cacheKeyFor(torboxKey, tmdbKey, rpdbKey)
 
   if (!force) {
     const cached = await getCachedLib(cacheKey)
@@ -268,4 +288,4 @@ async function clearCache() {
   }
 }
 
-module.exports = { getLibrary, buildLibrary, clearCache, posterUrlFor, mapLimit }
+module.exports = { getLibrary, buildLibrary, clearCache, posterUrlFor, mapLimit, hydrateStreams }

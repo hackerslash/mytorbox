@@ -31,7 +31,7 @@ function configurePage(torboxKey = '', tmdbKey = '', rpdbKey = '') {
 
 function decodeConfigParam(raw) {
   try {
-    return JSON.parse(decodeURIComponent(raw))
+    return JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))
   } catch {
     return null
   }

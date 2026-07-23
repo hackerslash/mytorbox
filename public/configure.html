@@ -851,11 +851,17 @@ async function onGenerateClick() {
   }
 }
 
+function toBase64Url(obj) {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let binary = '';
+  bytes.forEach((b) => { binary += String.fromCharCode(b); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 function buildAndShowLink(torbox, tmdb, rpdb) {
   const payload = { torbox_key: torbox, tmdb_key: tmdb };
   if (rpdb) payload.rpdb_key = rpdb;
-  // encoding matches stremio-addon-sdk's own config convention (encodeURIComponent(JSON) as the URL segment)
-  const config = encodeURIComponent(JSON.stringify(payload));
+  const config = toBase64Url(payload);
   const manifestUrl = `${location.origin}/${config}/manifest.json`;
 
   document.getElementById('result-url').value = manifestUrl;

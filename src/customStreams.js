@@ -13,7 +13,7 @@ function clampTtlMs(ttlMs) {
 }
 
 function userKeyFor(torboxKey, tmdbKey, rpdbKey) {
-  return `${torboxKey}|${tmdbKey}|${rpdbKey || ''}`
+  return crypto.createHash('sha256').update(`${torboxKey}|${tmdbKey}|${rpdbKey || ''}`).digest('hex')
 }
 
 function entryKey(userKey, entryId) {
