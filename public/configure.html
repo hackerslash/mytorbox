@@ -33,7 +33,17 @@
     --violet-soft: oklch(80% 0.085 var(--hue));
     --violet-wash: oklch(24% 0.04 var(--hue) / 0.5);
 
+    --blue: oklch(65% 0.17 258);
+    --blue-soft: oklch(80% 0.09 258);
+    --blue-border: oklch(52% 0.14 258 / 0.55);
+
+    --amber: oklch(74% 0.15 75);
+    --amber-soft: oklch(82% 0.11 78);
+    --amber-wash: oklch(26% 0.06 75 / 0.55);
+    --amber-border: oklch(58% 0.14 72 / 0.55);
+
     --success: oklch(76% 0.16 152);
+    --success-border: oklch(50% 0.13 152 / 0.5);
     --danger: oklch(69% 0.19 24);
 
     --font-sans: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -147,10 +157,15 @@
     font-family: var(--font-mono);
     font-size: 0.625rem;
     letter-spacing: 0.02em;
-    color: var(--violet-soft);
+    color: var(--text-2);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
   }
+
+  .tag.c-violet { color: var(--violet-soft); border-color: oklch(56% 0.2 var(--hue) / 0.5); }
+  .tag.c-blue { color: var(--blue-soft); border-color: var(--blue-border); }
+  .tag.c-green { color: var(--success); border-color: var(--success-border); }
+  .tag.c-amber { color: var(--amber-soft); border-color: var(--amber-border); }
 
   .rail-foot {
     margin: 0;
@@ -239,7 +254,7 @@
 
   .section-hint a {
     font-weight: 500;
-    color: var(--violet-soft);
+    color: var(--blue-soft);
     text-decoration: none;
   }
   .section-hint a:hover { text-decoration: underline; }
@@ -442,11 +457,11 @@
     margin-top: var(--sp-4);
     padding: var(--sp-3) var(--sp-4);
     border-radius: var(--radius-sm);
-    background: var(--violet-wash);
-    border: 1px solid var(--border-strong);
+    background: var(--amber-wash);
+    border: 1px solid var(--amber-border);
   }
 
-  .warning svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; color: var(--violet-soft); }
+  .warning svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; color: var(--amber-soft); }
 
   .warning-body strong {
     display: block;
@@ -522,7 +537,7 @@
     font-family: var(--font-mono);
     font-size: var(--fs-xs);
     font-variant-numeric: tabular-nums;
-    color: var(--violet-soft);
+    color: var(--amber-soft);
     flex-shrink: 0;
     white-space: nowrap;
     text-align: right;
@@ -583,11 +598,11 @@
       </div>
       <p class="rail-desc">Generates a personal manifest URL from your TorBox and TMDB credentials. Keys are embedded client-side, nothing is persisted on this server.</p>
       <nav class="rail-nav" aria-label="Sections">
-        <a href="#sec-identity"><span class="tag">01</span>Identity</a>
-        <a href="#sec-metadata"><span class="tag">02</span>Metadata</a>
+        <a href="#sec-identity"><span class="tag c-violet">01</span>Identity</a>
+        <a href="#sec-metadata"><span class="tag c-blue">02</span>Metadata</a>
         <a href="#sec-posters"><span class="tag">03</span>Posters</a>
-        <a href="#sec-output"><span class="tag">04</span>Output</a>
-        <a href="#sec-custom"><span class="tag">05</span>Custom Streams</a>
+        <a href="#sec-output"><span class="tag c-green">04</span>Output</a>
+        <a href="#sec-custom"><span class="tag c-amber">05</span>Custom Streams</a>
       </nav>
       <p class="rail-foot">Stremio addon for browsing a TorBox library. No accounts, no server-side tracking.</p>
     </aside>
@@ -600,7 +615,7 @@
 
       <section class="section" id="sec-identity">
         <div class="section-head">
-          <span class="tag">01</span>
+          <span class="tag c-violet">01</span>
           <div>
             <label for="torbox">TorBox API Key <span class="badge required">Required</span></label>
             <p class="section-hint">Grants read access to your TorBox library. <a href="https://torbox.app/settings" target="_blank" rel="noopener">Get a key →</a></p>
@@ -620,7 +635,7 @@
 
       <section class="section" id="sec-metadata">
         <div class="section-head">
-          <span class="tag">02</span>
+          <span class="tag c-blue">02</span>
           <div>
             <label for="tmdb">TMDB API Key <span class="badge required">Required</span></label>
             <p class="section-hint">Resolves titles, artwork, and metadata. <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Get a key →</a></p>
@@ -665,7 +680,7 @@
 
       <section class="section" id="sec-output">
         <div class="section-head">
-          <span class="tag">04</span>
+          <span class="tag c-green">04</span>
           <div>
             <label>Output</label>
             <p class="section-hint">Your manifest URL and install links appear here once the keys above validate.</p>
@@ -705,7 +720,7 @@
 
       <section class="section" id="sec-custom">
         <div class="section-head">
-          <span class="tag">05</span>
+          <span class="tag c-amber">05</span>
           <div>
             <label>Custom Streams</label>
             <p class="section-hint">Add your own IMDb id + stream URL — it appears as a separate catalogue in Stremio and deletes itself when its TTL runs out.</p>
