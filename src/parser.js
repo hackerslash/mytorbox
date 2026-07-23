@@ -32,12 +32,19 @@ function stripJunkPrefixes(name) {
   return cleaned
 }
 
+// Despite its own types claiming `title?: string`, guessit-js frequently returns an array
+// (e.g. ["Apocalypse Now", "Final Cut"]) when it can't cleanly separate the title from a
+// trailing fragment like an edition or language name. The first element is always the title.
+function titleToString(title) {
+  return Array.isArray(title) ? title[0] : title
+}
+
 /** guessit sometimes truncates a numbered title to just the number (e.g. "10 Things I Hate
  * About You" -> "10"). parse-torrent-title doesn't share that bug, so cross-check and prefer
  * its title only when it plausibly extends the same number. */
 function fixTruncatedNumericTitle(cleanedName, title) {
   if (!title || !/^\d+$/.test(title.trim())) return title
-  const alt = PTT.parse(cleanedName).title
+  const alt = titleToString(PTT.parse(cleanedName).title)
   if (alt && alt.trim() !== title.trim() && alt.trim().startsWith(title.trim())) {
     return alt.trim()
   }
@@ -58,7 +65,7 @@ function* parseWorkItems(source, entry) {
     const cleanedName = stripJunkPrefixes(name)
     const guess = guessit(cleanedName)
 
-    let title = fixTruncatedNumericTitle(cleanedName, guess.title)
+    let title = fixTruncatedNumericTitle(cleanedName, titleToString(guess.title))
     let year = guess.year || null
     let isEpisode = guess.type === 'episode'
     let season = isEpisode ? guess.season || 1 : null
@@ -68,7 +75,7 @@ function* parseWorkItems(source, entry) {
     // the real title only lives on the parent torrent/webdl entry.
     if (isEpisode && !title && entry.name) {
       if (entryGuess === undefined) entryGuess = guessit(stripJunkPrefixes(entry.name))
-      title = fixTruncatedNumericTitle(entry.name, entryGuess.title)
+      title = fixTruncatedNumericTitle(entry.name, titleToString(entryGuess.title))
       year = year || entryGuess.year || null
       season = season || entryGuess.season || 1
     }
