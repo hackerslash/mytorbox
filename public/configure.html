@@ -823,11 +823,12 @@ async function onGenerateClick() {
       body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null }),
     });
 
-    if (!res.ok) {
-      throw new Error(`Validation request failed (HTTP ${res.status})`);
+    // Prefer the server's message (e.g. rate-limit "Too many requests...") over a bare HTTP code.
+    let result = null;
+    try { result = await res.json(); } catch {}
+    if (!res.ok || !result) {
+      throw new Error((result && result.error) || `Validation request failed (HTTP ${res.status})`);
     }
-
-    const result = await res.json();
 
     setFieldStatus('torbox', result.torbox.valid ? 'valid' : 'invalid', result.torbox.detail);
     setFieldStatus('tmdb', result.tmdb.valid ? 'valid' : 'invalid', result.tmdb.detail);
@@ -1102,11 +1103,17 @@ async function onAddCustomStream() {
 async function onRemoveCustomStream(id) {
   const { torbox, tmdb, rpdb } = getConfigValues();
   try {
-    await fetch('/api/custom-streams/remove', {
+    const res = await fetch('/api/custom-streams/remove', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null, id }),
     });
+    // Otherwise a failed remove (e.g. rate-limited) silently no-ops and the entry just reappears.
+    if (!res.ok) {
+      let data = null;
+      try { data = await res.json(); } catch {}
+      alert((data && data.error) || `Could not remove stream (HTTP ${res.status})`);
+    }
   } finally {
     loadCustomStreams();
   }
