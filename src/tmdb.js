@@ -31,4 +31,8 @@ function posterUrl(result) {
   return `${TMDB_IMAGE_BASE}${result.poster_path}`
 }
 
-module.exports = { search, posterUrl }
+function clearCache() {
+  cache.clear()
+}
+
+module.exports = { search, posterUrl, clearCache }

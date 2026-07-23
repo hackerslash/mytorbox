@@ -201,4 +201,8 @@ async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
   return run
 }
 
-module.exports = { getLibrary, buildLibrary }
+function clearCache() {
+  cache.clear()
+}
+
+module.exports = { getLibrary, buildLibrary, clearCache }

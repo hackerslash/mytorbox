@@ -5,6 +5,8 @@ const cors = require('cors')
 const { getRouter } = require('stremio-addon-sdk')
 const { builder } = require('./addon')
 const validators = require('./validators')
+const library = require('./library')
+const tmdb = require('./tmdb')
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public')
 const LOGO_PATH = path.join(PUBLIC_DIR, 'logo.png')
@@ -63,6 +65,12 @@ app.post('/api/validate', async (req, res) => {
     validators.checkRpdb(rpdbKey),
   ])
   res.json({ torbox, tmdb, rpdb })
+})
+
+app.post('/api/cache/clear', (req, res) => {
+  library.clearCache()
+  tmdb.clearCache()
+  res.json({ cleared: true })
 })
 
 app.get('/logo.png', (req, res) => {
