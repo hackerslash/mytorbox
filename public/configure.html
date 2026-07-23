@@ -290,6 +290,118 @@
   }
 
   .warning svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; color: #c084fc; }
+
+  #custom-streams-section {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .cs-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .cs-row > * { flex: 1; min-width: 0; }
+
+  input.plain, select.plain {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 0.95rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #ffffff08;
+    color: var(--text);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  input.plain:focus, select.plain:focus {
+    outline: none;
+    border-color: var(--violet-2);
+    box-shadow: 0 0 0 3px #7c3aed33;
+  }
+
+  select.plain option { background: var(--bg-1); color: var(--text); }
+
+  #cs-add-btn {
+    width: 100%;
+    justify-content: center;
+    margin-top: 4px;
+  }
+
+  #cs-list { margin-top: 18px; }
+
+  .cs-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    background: #ffffff05;
+  }
+
+  .cs-item img {
+    width: 36px;
+    height: 54px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: #ffffff10;
+    flex-shrink: 0;
+  }
+
+  .cs-item-info { flex: 1; min-width: 0; }
+
+  .cs-item-name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cs-item-meta {
+    font-size: 0.74rem;
+    color: var(--muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cs-item-ttl {
+    font-size: 0.72rem;
+    color: var(--violet);
+    flex-shrink: 0;
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  .cs-item-remove {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #ffffff08;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .cs-item-remove:hover { background: #f8717122; color: #f87171; border-color: #f8717155; }
+  .cs-item-remove svg { width: 14px; height: 14px; }
+
+  .cs-empty {
+    font-size: 0.82rem;
+    color: var(--muted);
+    text-align: center;
+    padding: 16px 0;
+  }
+
+  #custom-streams-section.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -361,6 +473,33 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
         <span>Anyone with this URL can access your TorBox library — treat it like a password.</span>
       </div>
+    </div>
+
+    <div id="custom-streams-section" class="disabled">
+      <label>Custom Streams <span><span class="optional">each entry expires after 3 hours</span></span></label>
+      <p class="hint" style="margin-bottom: 14px;">Add your own IMDb id + stream URL — it appears as a separate "Custom Streams" catalogue in Stremio and deletes itself 3 hours later.</p>
+
+      <div class="cs-row">
+        <input type="text" class="plain" id="cs-imdb" placeholder="IMDb id, e.g. tt1234567">
+        <select class="plain" id="cs-type" onchange="onCustomTypeChange()">
+          <option value="movie">Movie</option>
+          <option value="series">Series</option>
+        </select>
+      </div>
+      <div class="cs-row" id="cs-episode-fields" style="display: none;">
+        <input type="number" class="plain" id="cs-season" placeholder="Season" min="0">
+        <input type="number" class="plain" id="cs-episode" placeholder="Episode" min="1">
+      </div>
+      <div class="cs-row">
+        <input type="text" class="plain" id="cs-url" placeholder="https://... direct stream URL">
+      </div>
+      <div class="cs-row">
+        <input type="text" class="plain" id="cs-title" placeholder="Title (optional)">
+      </div>
+      <div class="field-status" id="cs-add-status"></div>
+      <button class="btn" id="cs-add-btn" type="button" onclick="onAddCustomStream()">Add Custom Stream</button>
+
+      <div id="cs-list"></div>
     </div>
   </div>
 
@@ -436,6 +575,7 @@ async function onGenerateClick() {
     const allValid = result.torbox.valid && result.tmdb.valid && (!result.rpdb || result.rpdb.valid);
     if (allValid) {
       buildAndShowLink(torbox, tmdb, rpdb);
+      refreshCustomStreamsSection();
     }
   } catch (err) {
     setFieldStatus('torbox', 'idle');
@@ -485,6 +625,213 @@ function copyUrl() {
     btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   }, 1500);
 }
+
+// --- Custom Streams ---
+
+const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16z"/></svg>';
+
+let currentCustomEntries = [];
+let customStreamsTicker = null;
+
+function getConfigValues() {
+  return {
+    torbox: document.getElementById('torbox').value.trim(),
+    tmdb: document.getElementById('tmdb').value.trim(),
+    rpdb: document.getElementById('rpdb').value.trim(),
+  };
+}
+
+function onCustomTypeChange() {
+  const isSeries = document.getElementById('cs-type').value === 'series';
+  document.getElementById('cs-episode-fields').style.display = isSeries ? 'flex' : 'none';
+}
+
+function formatRemaining(expiresAtMs) {
+  const ms = expiresAtMs - Date.now();
+  if (ms <= 0) return 'Expired';
+  const totalMinutes = Math.ceil(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) return `${hours}h ${minutes}m left`;
+  return `${minutes}m left`;
+}
+
+function renderCustomStreamsList() {
+  const list = document.getElementById('cs-list');
+  list.innerHTML = '';
+
+  if (!currentCustomEntries.length) {
+    const empty = document.createElement('div');
+    empty.className = 'cs-empty';
+    empty.textContent = 'No custom streams active.';
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const entry of currentCustomEntries) {
+    const item = document.createElement('div');
+    item.className = 'cs-item';
+
+    const img = document.createElement('img');
+    img.src = entry.poster || '';
+    img.alt = '';
+    item.appendChild(img);
+
+    const info = document.createElement('div');
+    info.className = 'cs-item-info';
+
+    const name = document.createElement('div');
+    name.className = 'cs-item-name';
+    name.textContent = entry.name || entry.imdb_id;
+    info.appendChild(name);
+
+    const meta = document.createElement('div');
+    meta.className = 'cs-item-meta';
+    const parts = [entry.type === 'series' ? `Series S${entry.season}E${entry.episode}` : 'Movie', entry.imdb_id];
+    meta.textContent = parts.join(' · ');
+    info.appendChild(meta);
+
+    item.appendChild(info);
+
+    const ttl = document.createElement('div');
+    ttl.className = 'cs-item-ttl';
+    ttl.dataset.expiresAt = entry.expires_at;
+    ttl.textContent = formatRemaining(entry.expires_at);
+    item.appendChild(ttl);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'cs-item-remove';
+    removeBtn.setAttribute('aria-label', 'Remove');
+    removeBtn.innerHTML = ICON_TRASH;
+    removeBtn.addEventListener('click', () => onRemoveCustomStream(entry.id));
+    item.appendChild(removeBtn);
+
+    list.appendChild(item);
+  }
+}
+
+function tickCustomStreamsCountdown() {
+  let anyExpired = false;
+  document.querySelectorAll('#cs-list .cs-item-ttl').forEach((el) => {
+    const remaining = formatRemaining(Number(el.dataset.expiresAt));
+    el.textContent = remaining;
+    if (remaining === 'Expired') anyExpired = true;
+  });
+  if (anyExpired) loadCustomStreams();
+}
+
+async function loadCustomStreams() {
+  const { torbox, tmdb, rpdb } = getConfigValues();
+  if (!torbox || !tmdb) return;
+
+  try {
+    const res = await fetch('/api/custom-streams/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      currentCustomEntries = data.entries;
+      renderCustomStreamsList();
+    }
+  } catch {
+    // silently leave the last-known list in place
+  }
+}
+
+function refreshCustomStreamsSection() {
+  const { torbox, tmdb } = getConfigValues();
+  const section = document.getElementById('custom-streams-section');
+  const active = Boolean(torbox && tmdb);
+  section.classList.toggle('disabled', !active);
+  if (active) loadCustomStreams();
+}
+
+async function onAddCustomStream() {
+  const { torbox, tmdb, rpdb } = getConfigValues();
+  const imdbId = document.getElementById('cs-imdb').value.trim();
+  const type = document.getElementById('cs-type').value;
+  const season = document.getElementById('cs-season').value;
+  const episode = document.getElementById('cs-episode').value;
+  const streamUrl = document.getElementById('cs-url').value.trim();
+  const title = document.getElementById('cs-title').value.trim();
+
+  const statusEl = document.getElementById('cs-add-status');
+  statusEl.classList.remove('valid', 'invalid');
+  statusEl.innerHTML = '';
+
+  if (!/^tt\d+$/.test(imdbId)) {
+    statusEl.classList.add('invalid');
+    statusEl.innerHTML = `${ICON_CROSS}<span>IMDb id must look like tt1234567</span>`;
+    return;
+  }
+  if (!/^https?:\/\/.+/i.test(streamUrl)) {
+    statusEl.classList.add('invalid');
+    statusEl.innerHTML = `${ICON_CROSS}<span>Stream URL must start with http(s)://</span>`;
+    return;
+  }
+  if (type === 'series' && (!season || !episode)) {
+    statusEl.classList.add('invalid');
+    statusEl.innerHTML = `${ICON_CROSS}<span>Season and episode are required for series</span>`;
+    return;
+  }
+
+  const btn = document.getElementById('cs-add-btn');
+  btn.disabled = true;
+  btn.textContent = 'Adding...';
+
+  try {
+    const res = await fetch('/api/custom-streams/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null,
+        type, imdb_id: imdbId, season: season ? Number(season) : null, episode: episode ? Number(episode) : null,
+        stream_url: streamUrl, title: title || null,
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      statusEl.classList.add('invalid');
+      statusEl.innerHTML = `${ICON_CROSS}<span>${data.error}</span>`;
+      return;
+    }
+    statusEl.classList.add('valid');
+    statusEl.innerHTML = `${ICON_CHECK}<span>Added</span>`;
+    document.getElementById('cs-imdb').value = '';
+    document.getElementById('cs-url').value = '';
+    document.getElementById('cs-title').value = '';
+    document.getElementById('cs-season').value = '';
+    document.getElementById('cs-episode').value = '';
+    loadCustomStreams();
+  } catch (err) {
+    statusEl.classList.add('invalid');
+    statusEl.innerHTML = `${ICON_CROSS}<span>Request failed: ${err.message}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Add Custom Stream';
+  }
+}
+
+async function onRemoveCustomStream(id) {
+  const { torbox, tmdb, rpdb } = getConfigValues();
+  try {
+    await fetch('/api/custom-streams/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null, id }),
+    });
+  } finally {
+    loadCustomStreams();
+  }
+}
+
+document.getElementById('torbox').addEventListener('input', refreshCustomStreamsSection);
+document.getElementById('tmdb').addEventListener('input', refreshCustomStreamsSection);
+document.addEventListener('DOMContentLoaded', refreshCustomStreamsSection);
+customStreamsTicker = setInterval(tickCustomStreamsCountdown, 30000);
 </script>
 </body>
 </html>

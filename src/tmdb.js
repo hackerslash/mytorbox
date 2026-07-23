@@ -3,6 +3,7 @@ const { getJson } = require('./httpUtils')
 
 const cache = new Map()
 const imagesCache = new Map()
+const findCache = new Map()
 
 async function searchOnce(title, year, kind, apiKey) {
   const params = new URLSearchParams({ api_key: apiKey, query: title })
@@ -56,9 +57,29 @@ function logoUrl(images, originalLanguage) {
   return chosen ? `${TMDB_IMAGE_BASE}${chosen.file_path}` : null
 }
 
+async function findByImdbId(imdbId, apiKey) {
+  const key = `find:${imdbId}`
+  if (findCache.has(key)) return findCache.get(key)
+
+  let result = null
+  try {
+    const url = `${TMDB_BASE}/find/${imdbId}?api_key=${apiKey}&external_source=imdb_id`
+    const data = await getJson(url)
+    const movie = (data && data.movie_results && data.movie_results[0]) || null
+    const tv = (data && data.tv_results && data.tv_results[0]) || null
+    result = movie ? { kind: 'movie', result: movie } : tv ? { kind: 'tv', result: tv } : null
+  } catch {
+    result = null
+  }
+
+  findCache.set(key, result)
+  return result
+}
+
 function clearCache() {
   cache.clear()
   imagesCache.clear()
+  findCache.clear()
 }
 
-module.exports = { search, posterUrl, getImages, logoUrl, clearCache }
+module.exports = { search, posterUrl, getImages, logoUrl, findByImdbId, clearCache }

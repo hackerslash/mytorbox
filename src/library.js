@@ -225,4 +225,4 @@ function clearCache() {
   cache.clear()
 }
 
-module.exports = { getLibrary, buildLibrary, clearCache }
+module.exports = { getLibrary, buildLibrary, clearCache, posterUrlFor, mapLimit }

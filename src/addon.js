@@ -1,8 +1,12 @@
 const { addonBuilder } = require('stremio-addon-sdk')
 const config = require('./config')
 const { getLibrary } = require('./library')
+const { buildCustomCatalog } = require('./customCatalog')
 
 const HAS_DEFAULTS = Boolean(config.DEFAULT_TORBOX_API_KEY && config.DEFAULT_TMDB_API_KEY)
+
+const CUSTOM_MOVIES_CATALOG_ID = 'torbox-custom-movies'
+const CUSTOM_SERIES_CATALOG_ID = 'torbox-custom-series'
 
 const manifest = {
   id: 'addon.mytorbox',
@@ -19,6 +23,8 @@ const manifest = {
   catalogs: [
     { type: 'movie', id: 'torbox-movies', name: 'MyTorbox Movies' },
     { type: 'series', id: 'torbox-series', name: 'MyTorbox Series' },
+    { type: 'movie', id: CUSTOM_MOVIES_CATALOG_ID, name: 'Custom Streams' },
+    { type: 'series', id: CUSTOM_SERIES_CATALOG_ID, name: 'Custom Streams' },
   ],
   idPrefixes: ['tb:'],
   config: [
@@ -51,6 +57,14 @@ const builder = new addonBuilder(manifest)
 builder.defineCatalogHandler(async ({ type, id, config: cfg }) => {
   const keys = resolveKeys(cfg)
   if (!keys) return { metas: [] }
+
+  if (id === CUSTOM_MOVIES_CATALOG_ID || id === CUSTOM_SERIES_CATALOG_ID) {
+    const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
+    if (type === 'movie' && id === CUSTOM_MOVIES_CATALOG_ID) return { metas: custom.movies }
+    if (type === 'series' && id === CUSTOM_SERIES_CATALOG_ID) return { metas: custom.series }
+    return { metas: [] }
+  }
+
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
   if (type === 'movie' && id === 'torbox-movies') return { metas: lib.movies }
   if (type === 'series' && id === 'torbox-series') return { metas: lib.series }
@@ -60,6 +74,14 @@ builder.defineCatalogHandler(async ({ type, id, config: cfg }) => {
 builder.defineMetaHandler(async ({ type, id, config: cfg }) => {
   const keys = resolveKeys(cfg)
   if (!keys) return Promise.reject({ noHandler: true })
+
+  if (id.startsWith('tb:custom:')) {
+    const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
+    const item = custom.meta[id]
+    if (!item || item.type !== type) return Promise.reject({ noHandler: true })
+    return { meta: item }
+  }
+
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
   const item = lib.meta[id]
   if (!item || item.type !== type) return Promise.reject({ noHandler: true })
@@ -69,6 +91,14 @@ builder.defineMetaHandler(async ({ type, id, config: cfg }) => {
 builder.defineStreamHandler(async ({ type, id, config: cfg }) => {
   const keys = resolveKeys(cfg)
   if (!keys) return { streams: [] }
+
+  if (id.startsWith('tb:custom:')) {
+    const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
+    const streams = custom.streams[id]
+    if (!streams) return Promise.reject({ noHandler: true })
+    return { streams }
+  }
+
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
   const streams = lib.streams[id]
   if (!streams) return Promise.reject({ noHandler: true })

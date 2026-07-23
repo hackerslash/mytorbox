@@ -17,6 +17,9 @@ const LIBRARY_TTL_MS = 300 * 1000
 const VIDEO_EXTENSIONS = new Set(['.mkv', '.mp4', '.avi', '.mov', '.m4v', '.webm', '.ts', '.flv'])
 const MIN_FILE_SIZE_BYTES = 500 * 1024 * 1024
 
+const CUSTOM_STREAM_TTL_MS = 3 * 60 * 60 * 1000
+const MAX_CUSTOM_STREAMS_PER_KEY = 200
+
 module.exports = {
   DEFAULT_TORBOX_API_KEY,
   DEFAULT_TMDB_API_KEY,
@@ -30,4 +33,6 @@ module.exports = {
   LIBRARY_TTL_MS,
   VIDEO_EXTENSIONS,
   MIN_FILE_SIZE_BYTES,
+  CUSTOM_STREAM_TTL_MS,
+  MAX_CUSTOM_STREAMS_PER_KEY,
 }
