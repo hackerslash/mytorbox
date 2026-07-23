@@ -723,7 +723,7 @@
           <span class="tag c-amber">05</span>
           <div>
             <label>Custom Streams</label>
-            <p class="section-hint">Add your own IMDb id + stream URL — it appears as a separate catalogue in Stremio and deletes itself when its TTL runs out.</p>
+            <p class="section-hint">Add your own stream URL — with an IMDb id it gets proper posters/metadata, without one it still shows up under its title alone. Appears as a separate catalogue in Stremio and deletes itself when its TTL runs out.</p>
           </div>
         </div>
 
@@ -732,7 +732,7 @@
 
           <div id="cs-add-form" style="display: none; margin-top: var(--sp-4);">
             <div class="cs-row">
-              <input type="text" class="plain" id="cs-imdb" placeholder="IMDb id, e.g. tt1234567">
+              <input type="text" class="plain" id="cs-imdb" placeholder="IMDb id, e.g. tt1234567 (optional)">
               <select class="plain" id="cs-type" onchange="onCustomTypeChange()">
                 <option value="movie">Movie</option>
                 <option value="series">Series</option>
@@ -746,7 +746,7 @@
               <input type="text" class="plain" id="cs-url" placeholder="https://... direct stream URL">
             </div>
             <div class="cs-row">
-              <input type="text" class="plain" id="cs-title" placeholder="Title (optional)">
+              <input type="text" class="plain" id="cs-title" placeholder="Title (required if no IMDb id)">
               <select class="plain" id="cs-ttl">
                 <option value="1800">Expires in 30m</option>
                 <option value="3600">Expires in 1h</option>
@@ -964,7 +964,7 @@ function renderCustomStreamsList() {
 
     const meta = document.createElement('div');
     meta.className = 'cs-item-meta';
-    const parts = [entry.type === 'series' ? `Series S${entry.season}E${entry.episode}` : 'Movie', entry.imdb_id];
+    const parts = [entry.type === 'series' ? `Series S${entry.season}E${entry.episode}` : 'Movie', entry.imdb_id].filter(Boolean);
     meta.textContent = parts.join(' · ');
     info.appendChild(meta);
 
@@ -1040,9 +1040,14 @@ async function onAddCustomStream() {
   statusEl.classList.remove('valid', 'invalid');
   statusEl.innerHTML = '';
 
-  if (!/^tt\d+$/.test(imdbId)) {
+  if (imdbId && !/^tt\d+$/.test(imdbId)) {
     statusEl.classList.add('invalid');
     statusEl.innerHTML = `${ICON_CROSS}<span>IMDb id must look like tt1234567</span>`;
+    return;
+  }
+  if (!imdbId && !title) {
+    statusEl.classList.add('invalid');
+    statusEl.innerHTML = `${ICON_CROSS}<span>Provide an IMDb id, or a title if there isn't one</span>`;
     return;
   }
   if (!/^https?:\/\/.+/i.test(streamUrl)) {
@@ -1066,7 +1071,7 @@ async function onAddCustomStream() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null,
-        type, imdb_id: imdbId, season: season ? Number(season) : null, episode: episode ? Number(episode) : null,
+        type, imdb_id: imdbId || null, season: season ? Number(season) : null, episode: episode ? Number(episode) : null,
         stream_url: streamUrl, title: title || null, ttl_seconds: ttlSeconds,
       }),
     });

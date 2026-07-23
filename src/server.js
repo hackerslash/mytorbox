@@ -89,7 +89,7 @@ function toPublicEntry(e) {
 }
 
 async function enrichEntry(e, tmdbKey, rpdbKey) {
-  const found = await tmdb.findByImdbId(e.imdbId, tmdbKey).catch(() => null)
+  const found = e.imdbId ? await tmdb.findByImdbId(e.imdbId, tmdbKey).catch(() => null) : null
   const tmdbRes = found ? found.result : null
   const name = (tmdbRes && (tmdbRes.title || tmdbRes.name)) || e.title || e.imdbId
   const poster = library.posterUrlFor(tmdbRes, e.type, rpdbKey)
@@ -118,8 +118,12 @@ app.post('/api/custom-streams/add', async (req, res) => {
   if (type !== 'movie' && type !== 'series') {
     return res.status(400).json({ ok: false, error: 'type must be "movie" or "series"' })
   }
-  if (!customStreams.isValidImdbId(imdbId)) {
+  const trimmedTitle = typeof title === 'string' ? title.trim().slice(0, 200) : ''
+  if (imdbId && !customStreams.isValidImdbId(imdbId)) {
     return res.status(400).json({ ok: false, error: 'imdb_id must look like ttNNNNNNN' })
+  }
+  if (!imdbId && !trimmedTitle) {
+    return res.status(400).json({ ok: false, error: 'Provide an IMDb id, or a title if there isn\'t one' })
   }
   if (!customStreams.isValidStreamUrl(streamUrl)) {
     return res.status(400).json({ ok: false, error: 'stream_url must be a valid http(s) URL' })
@@ -149,9 +153,8 @@ app.post('/api/custom-streams/add', async (req, res) => {
     ttlMs = ttlSecondsNum * 1000
   }
 
-  const trimmedTitle = typeof title === 'string' ? title.trim().slice(0, 200) : ''
   const entry = await customStreams.addCustomStream(torboxKey, tmdbKey, rpdbKey || null, {
-    type, imdbId, season: seasonNum, episode: episodeNum, streamUrl, title: trimmedTitle || null, ttlMs,
+    type, imdbId: imdbId || null, season: seasonNum, episode: episodeNum, streamUrl, title: trimmedTitle || null, ttlMs,
   })
   if (!entry) {
     return res.status(400).json({ ok: false, error: 'Custom stream limit reached, or storage is not configured' })

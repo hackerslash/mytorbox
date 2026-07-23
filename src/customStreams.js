@@ -1,5 +1,6 @@
 const crypto = require('crypto')
 const redis = require('./redisClient')
+const { slugify } = require('./parser')
 const {
   CUSTOM_STREAM_DEFAULT_TTL_MS,
   CUSTOM_STREAM_MIN_TTL_MS,
@@ -32,6 +33,12 @@ function isValidStreamUrl(url) {
   return typeof url === 'string' && /^https?:\/\/.+/i.test(url)
 }
 
+// Entries without an IMDb id (content TorBox/TMDB has no listing for) still need a stable
+// key to group multiple sources under one catalog item — derive one from the title instead.
+function groupKeyFor(imdbId, title) {
+  return imdbId || `noimdb-${slugify(title || 'untitled')}`
+}
+
 async function addCustomStream(torboxKey, tmdbKey, rpdbKey, entry) {
   if (!redis) return null
 
@@ -52,7 +59,8 @@ async function addCustomStream(torboxKey, tmdbKey, rpdbKey, entry) {
     const stored = {
       id,
       type: entry.type,
-      imdbId: entry.imdbId,
+      imdbId: entry.imdbId || null,
+      groupKey: groupKeyFor(entry.imdbId, entry.title),
       season: entry.type === 'series' ? entry.season : null,
       episode: entry.type === 'series' ? entry.episode : null,
       streamUrl: entry.streamUrl,

@@ -17,27 +17,34 @@ async function buildCustomCatalog(torboxKey, tmdbKey, rpdbKey) {
   const lib = { movies: [], series: [], meta: {}, streams: {} }
   if (!entries.length) return lib
 
-  const movieGroups = new Map() // imdbId -> entry[]
-  const seriesGroups = new Map() // imdbId -> { episodes: Map<"season:episode", entry[]> }
+  const movieGroups = new Map() // groupKey -> entry[]
+  const seriesGroups = new Map() // groupKey -> { episodes: Map<"season:episode", entry[]> }
 
   for (const e of entries) {
     if (e.type === 'movie') {
-      if (!movieGroups.has(e.imdbId)) movieGroups.set(e.imdbId, [])
-      movieGroups.get(e.imdbId).push(e)
+      if (!movieGroups.has(e.groupKey)) movieGroups.set(e.groupKey, [])
+      movieGroups.get(e.groupKey).push(e)
     } else {
-      if (!seriesGroups.has(e.imdbId)) seriesGroups.set(e.imdbId, { episodes: new Map() })
-      const g = seriesGroups.get(e.imdbId)
+      if (!seriesGroups.has(e.groupKey)) seriesGroups.set(e.groupKey, { episodes: new Map() })
+      const g = seriesGroups.get(e.groupKey)
       const epKey = `${e.season}:${e.episode}`
       if (!g.episodes.has(epKey)) g.episodes.set(epKey, [])
       g.episodes.get(epKey).push(e)
     }
   }
 
-  const movieImdbIds = [...movieGroups.keys()]
-  const seriesImdbIds = [...seriesGroups.keys()]
+  const movieGroupKeys = [...movieGroups.keys()]
+  const seriesGroupKeys = [...seriesGroups.keys()]
 
-  const movieFinds = await mapLimit(movieImdbIds, TMDB_CONCURRENCY, (id) => tmdb.findByImdbId(id, tmdbKey))
-  const seriesFinds = await mapLimit(seriesImdbIds, TMDB_CONCURRENCY, (id) => tmdb.findByImdbId(id, tmdbKey))
+  // Groups with no IMDb id have nothing to look up on TMDB — they run on the title alone.
+  const movieFinds = await mapLimit(movieGroupKeys, TMDB_CONCURRENCY, (key) => {
+    const imdbId = movieGroups.get(key)[0].imdbId
+    return imdbId ? tmdb.findByImdbId(imdbId, tmdbKey) : null
+  })
+  const seriesFinds = await mapLimit(seriesGroupKeys, TMDB_CONCURRENCY, (key) => {
+    const imdbId = seriesGroups.get(key).episodes.values().next().value[0].imdbId
+    return imdbId ? tmdb.findByImdbId(imdbId, tmdbKey) : null
+  })
 
   const movieImages = await mapLimit(movieFinds, TMDB_CONCURRENCY, (f) =>
     f ? tmdb.getImages(f.kind, f.result.id, tmdbKey) : null
@@ -46,12 +53,12 @@ async function buildCustomCatalog(torboxKey, tmdbKey, rpdbKey) {
     f ? tmdb.getImages(f.kind, f.result.id, tmdbKey) : null
   )
 
-  movieImdbIds.forEach((imdbId, i) => {
+  movieGroupKeys.forEach((groupKey, i) => {
     const found = movieFinds[i]
     const tmdbRes = found ? found.result : null
-    const groupEntries = movieGroups.get(imdbId)
-    const mid = `tb:custom:movie:${imdbId}`
-    const fallbackTitle = groupEntries.find((e) => e.title) ? groupEntries.find((e) => e.title).title : imdbId
+    const groupEntries = movieGroups.get(groupKey)
+    const mid = `tb:custom:movie:${groupKey}`
+    const fallbackTitle = groupEntries.find((e) => e.title) ? groupEntries.find((e) => e.title).title : groupKey
     const name = (tmdbRes && tmdbRes.title) || fallbackTitle
 
     const preview = {
@@ -76,13 +83,13 @@ async function buildCustomCatalog(torboxKey, tmdbKey, rpdbKey) {
       .map(streamDictFor)
   })
 
-  seriesImdbIds.forEach((imdbId, i) => {
+  seriesGroupKeys.forEach((groupKey, i) => {
     const found = seriesFinds[i]
     const tmdbRes = found ? found.result : null
-    const g = seriesGroups.get(imdbId)
-    const sid = `tb:custom:series:${imdbId}`
+    const g = seriesGroups.get(groupKey)
+    const sid = `tb:custom:series:${groupKey}`
     const allEntries = [...g.episodes.values()].flat()
-    const fallbackTitle = allEntries.find((e) => e.title) ? allEntries.find((e) => e.title).title : imdbId
+    const fallbackTitle = allEntries.find((e) => e.title) ? allEntries.find((e) => e.title).title : groupKey
     const name = (tmdbRes && tmdbRes.name) || fallbackTitle
 
     const preview = {
