@@ -1,5 +1,6 @@
 const PTT = require('parse-torrent-title')
 const { isVideo } = require('./torbox')
+const { MIN_FILE_SIZE_BYTES } = require('./config')
 
 function slugify(text) {
   const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -9,9 +10,11 @@ function slugify(text) {
 /** Yield one work item per video file in a torbox/webdl mylist entry. */
 function* parseWorkItems(source, entry) {
   const itemId = entry.id
+  const createdAt = Date.parse(entry.created_at) || 0
   for (const f of entry.files || []) {
     const name = f.short_name || f.name || ''
     if (!isVideo(name)) continue
+    if ((f.size || 0) < MIN_FILE_SIZE_BYTES) continue
 
     const guess = PTT.parse(name)
     const title = guess.title
@@ -27,6 +30,7 @@ function* parseWorkItems(source, entry) {
       fileId: f.id,
       filename: name,
       size: f.size,
+      createdAt,
       title,
       year: guess.year || null,
       isEpisode,

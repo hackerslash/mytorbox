@@ -64,14 +64,20 @@ function dedupeByTmdb(keysAndGroups, results, mergeFn) {
 function mergeMovieGroups(dst, src) {
   dst.items.push(...src.items)
   dst.year = dst.year || src.year
+  dst.createdAt = Math.max(dst.createdAt, src.createdAt)
 }
 
 function mergeSeriesGroups(dst, src) {
   dst.year = dst.year || src.year
+  dst.createdAt = Math.max(dst.createdAt, src.createdAt)
   for (const [epKey, items] of src.episodes) {
     if (!dst.episodes.has(epKey)) dst.episodes.set(epKey, [])
     dst.episodes.get(epKey).push(...items)
   }
+}
+
+function byCreatedAtDesc([, a], [, b]) {
+  return b.createdAt - a.createdAt
 }
 
 function sortedBySize(items) {
@@ -94,19 +100,22 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey) {
     if (w.isEpisode) {
       const key = slugify(w.title)
       if (!seriesGroups.has(key)) {
-        seriesGroups.set(key, { title: w.title, year: null, episodes: new Map() })
+        seriesGroups.set(key, { title: w.title, year: null, createdAt: 0, episodes: new Map() })
       }
       const g = seriesGroups.get(key)
       g.year = g.year || w.year
+      g.createdAt = Math.max(g.createdAt, w.createdAt)
       const epKey = `${w.season}:${w.episode}`
       if (!g.episodes.has(epKey)) g.episodes.set(epKey, [])
       g.episodes.get(epKey).push(w)
     } else {
       const key = `${slugify(w.title)}-${w.year || 'na'}`
       if (!movieGroups.has(key)) {
-        movieGroups.set(key, { title: w.title, year: w.year, items: [] })
+        movieGroups.set(key, { title: w.title, year: w.year, createdAt: 0, items: [] })
       }
-      movieGroups.get(key).items.push(w)
+      const g = movieGroups.get(key)
+      g.items.push(w)
+      g.createdAt = Math.max(g.createdAt, w.createdAt)
     }
   }
 
@@ -122,8 +131,8 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey) {
 
   const lib = { movies: [], series: [], meta: {}, streams: {} }
 
-  const moviesMerged = dedupeByTmdb(movieKeys, movieResults, mergeMovieGroups)
-  const seriesMerged = dedupeByTmdb(seriesKeys, seriesResults, mergeSeriesGroups)
+  const moviesMerged = dedupeByTmdb(movieKeys, movieResults, mergeMovieGroups).sort(byCreatedAtDesc)
+  const seriesMerged = dedupeByTmdb(seriesKeys, seriesResults, mergeSeriesGroups).sort(byCreatedAtDesc)
 
   for (const [canonical, g, tmdbRes] of moviesMerged) {
     const mid = `tb:movie:${canonical}`

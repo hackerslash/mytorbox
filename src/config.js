@@ -15,6 +15,7 @@ const RPDB_BASE = 'https://api.ratingposterdb.com'
 
 const LIBRARY_TTL_MS = 300 * 1000
 const VIDEO_EXTENSIONS = new Set(['.mkv', '.mp4', '.avi', '.mov', '.m4v', '.webm', '.ts', '.flv'])
+const MIN_FILE_SIZE_BYTES = 500 * 1024 * 1024
 
 module.exports = {
   DEFAULT_TORBOX_API_KEY,
@@ -28,4 +29,5 @@ module.exports = {
   RPDB_BASE,
   LIBRARY_TTL_MS,
   VIDEO_EXTENSIONS,
+  MIN_FILE_SIZE_BYTES,
 }
