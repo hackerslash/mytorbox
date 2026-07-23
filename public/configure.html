@@ -4,109 +4,245 @@
 <meta charset="utf-8">
 <title>MyTorbox — Configure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <link rel="icon" type="image/png" href="/logo.png?v=__LOGO_VERSION__">
 <link rel="apple-touch-icon" href="/logo.png?v=__LOGO_VERSION__">
+<link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg-0: #05050a;
-    --bg-1: #0c0a16;
-    --card: #12101dcc;
-    --border: #ffffff17;
-    --border-strong: #ffffff2a;
-    --text: #f2f0f9;
-    --muted: #9a95b3;
-    --violet: #9b5cf6;
-    --violet-2: #7c3aed;
-    --blue: #4b39ef;
-    --danger-bg: #2a1730;
-    --danger-border: #6d3a8f66;
+    --hue: 292;
+
+    --bg-0: oklch(9% 0.014 var(--hue));
+    --bg-1: oklch(12.5% 0.017 var(--hue));
+    --bg-2: oklch(16% 0.02 var(--hue));
+    --bg-raised: oklch(19.5% 0.024 var(--hue));
+
+    --border: oklch(38% 0.03 var(--hue) / 0.4);
+    --border-strong: oklch(50% 0.045 var(--hue) / 0.65);
+
+    --text-0: oklch(95% 0.008 var(--hue));
+    --text-1: oklch(74% 0.02 var(--hue));
+    --text-2: oklch(53% 0.018 var(--hue));
+
+    --violet: oklch(66% 0.19 var(--hue));
+    --violet-strong: oklch(56% 0.205 var(--hue));
+    --violet-soft: oklch(80% 0.085 var(--hue));
+    --violet-wash: oklch(24% 0.04 var(--hue) / 0.5);
+
+    --success: oklch(76% 0.16 152);
+    --danger: oklch(69% 0.19 24);
+
+    --font-sans: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'Martian Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --fs-xs: 0.6875rem;
+    --fs-sm: 0.8125rem;
+    --fs-base: 0.9375rem;
+    --fs-lg: 1.25rem;
+    --fs-xl: 2rem;
+
+    --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+    --sp-5: 24px; --sp-6: 32px; --sp-7: 48px; --sp-8: 64px; --sp-9: 96px;
+
+    --radius-sm: 3px;
+    --radius-md: 6px;
   }
 
   * { box-sizing: border-box; }
 
+  html { scroll-behavior: smooth; }
+
   body {
     margin: 0;
     min-height: 100vh;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
-    color: var(--text);
-    background: radial-gradient(60% 50% at 50% -10%, #3b1f7a55, transparent 60%),
-                radial-gradient(50% 40% at 100% 100%, #2a1f8a3d, transparent 60%),
-                var(--bg-0);
-    background-attachment: fixed;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 20px;
+    font-family: var(--font-sans);
+    font-size: var(--fs-base);
+    color: var(--text-0);
+    background:
+      repeating-linear-gradient(0deg, oklch(20% 0.02 var(--hue) / 0.35) 0 1px, transparent 1px 48px),
+      repeating-linear-gradient(90deg, oklch(20% 0.02 var(--hue) / 0.35) 0 1px, transparent 1px 48px),
+      radial-gradient(120% 90% at 50% 0%, oklch(14% 0.02 var(--hue)) 0%, var(--bg-0) 65%);
     line-height: 1.5;
   }
 
-  .card {
-    width: 100%;
-    max-width: 480px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 36px 32px;
-    backdrop-filter: blur(20px);
-    box-shadow: 0 30px 80px -20px #00000090, inset 0 1px 0 #ffffff0f;
+  .page {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: clamp(var(--sp-6), 5vw, var(--sp-8)) clamp(var(--sp-4), 4vw, var(--sp-6)) var(--sp-9);
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: var(--sp-7);
+    align-items: start;
   }
 
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 6px;
+  @media (max-width: 880px) {
+    .page { grid-template-columns: 1fr; gap: var(--sp-6); }
   }
 
-  .brand img {
-    width: 48px;
-    height: 48px;
-    filter: drop-shadow(0 4px 16px #7c3aed66);
-  }
+  /* ---------- rail ---------- */
 
-  .brand h1 {
-    font-size: 1.35rem;
+  .rail { position: sticky; top: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-5); }
+  @media (max-width: 880px) { .rail { position: static; } }
+
+  .rail-brand { display: flex; align-items: center; gap: var(--sp-3); }
+  .rail-logo { width: 34px; height: 34px; filter: drop-shadow(0 3px 10px oklch(56% 0.2 var(--hue) / 0.45)); }
+
+  .rail-word h1 {
+    font-size: var(--fs-lg);
     font-weight: 700;
     letter-spacing: -0.02em;
     margin: 0;
   }
 
-  p.sub {
-    color: var(--muted);
-    font-size: 0.92rem;
-    margin: 14px 0 28px;
+  .kicker {
+    margin: var(--sp-1) 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--violet-soft);
   }
 
-  .field { margin-bottom: 18px; }
+  .rail-desc {
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--text-1);
+    line-height: 1.6;
+    max-width: 34ch;
+  }
+
+  .rail-nav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    border-top: 1px solid var(--border);
+    padding-top: var(--sp-4);
+  }
+
+  .rail-nav a {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) 0;
+    font-size: var(--fs-sm);
+    color: var(--text-1);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .rail-nav a:hover { color: var(--text-0); }
+
+  .tag {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 18px;
+    padding: 0 4px;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.02em;
+    color: var(--violet-soft);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+  }
+
+  .rail-foot {
+    margin: 0;
+    font-size: var(--fs-xs);
+    color: var(--text-2);
+    line-height: 1.6;
+    max-width: 32ch;
+  }
+
+  @media (max-width: 880px) {
+    .rail-nav { flex-direction: row; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); border-top: none; padding-top: 0; }
+  }
+
+  /* ---------- panel ---------- */
+
+  .panel {
+    position: relative;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--sp-6);
+  }
+
+  .corner {
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    pointer-events: none;
+  }
+  .corner.tl { top: -1px; left: -1px; border-top: 1.5px solid var(--violet); border-left: 1.5px solid var(--violet); border-top-left-radius: 2px; }
+  .corner.tr { top: -1px; right: -1px; border-top: 1.5px solid var(--violet); border-right: 1.5px solid var(--violet); border-top-right-radius: 2px; }
+  .corner.bl { bottom: -1px; left: -1px; border-bottom: 1.5px solid var(--violet); border-left: 1.5px solid var(--violet); border-bottom-left-radius: 2px; }
+  .corner.br { bottom: -1px; right: -1px; border-bottom: 1.5px solid var(--violet); border-right: 1.5px solid var(--violet); border-bottom-right-radius: 2px; }
+
+  .section { padding: var(--sp-5) 0; }
+  .section:first-of-type { padding-top: 0; }
+
+  .hr { height: 1px; background: var(--border); margin: 0; }
+
+  .section-head {
+    display: flex;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+
+  .section-head .tag { margin-top: 2px; }
 
   label {
     display: flex;
     align-items: baseline;
-    justify-content: space-between;
-    font-size: 0.8rem;
+    gap: var(--sp-2);
+    font-size: var(--fs-sm);
     font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 8px;
+    color: var(--text-0);
+    margin: 0;
   }
 
-  label .optional {
-    text-transform: none;
-    font-weight: 400;
-    letter-spacing: 0;
-    color: #6f6a87;
-  }
-
-  label a {
-    text-transform: none;
+  .badge {
+    font-family: var(--font-mono);
+    font-size: 0.5625rem;
     font-weight: 500;
-    letter-spacing: 0;
-    color: var(--violet);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+  }
+
+  .badge.required {
+    color: var(--violet-soft);
+    background: var(--violet-wash);
+    border-color: oklch(56% 0.2 var(--hue) / 0.5);
+  }
+
+  .badge.optional {
+    color: var(--text-2);
+    background: transparent;
+  }
+
+  .section-hint {
+    margin: var(--sp-1) 0 0;
+    font-size: var(--fs-xs);
+    color: var(--text-2);
+    line-height: 1.5;
+  }
+
+  .section-hint a {
+    font-weight: 500;
+    color: var(--violet-soft);
     text-decoration: none;
   }
-
-  label a:hover { text-decoration: underline; }
+  .section-hint a:hover { text-decoration: underline; }
 
   .input-wrap {
     position: relative;
@@ -116,69 +252,72 @@
 
   .input-wrap svg.icon-key {
     position: absolute;
-    left: 14px;
-    width: 16px;
-    height: 16px;
-    color: var(--muted);
+    left: 13px;
+    width: 15px;
+    height: 15px;
+    color: var(--text-2);
     pointer-events: none;
   }
 
-  input[type="password"], input[type="text"] {
+  input[type="password"], input[type="text"], input[type="number"], select {
     width: 100%;
-    padding: 12px 44px 12px 40px;
-    font-size: 0.95rem;
+    padding: 11px 42px 11px 38px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    background: #ffffff08;
-    color: var(--text);
+    border-radius: var(--radius-sm);
+    background: var(--bg-2);
+    color: var(--text-0);
     transition: border-color 0.15s, box-shadow 0.15s;
   }
 
-  input::placeholder { color: #6f6a87; }
+  input::placeholder { color: var(--text-2); font-family: var(--font-mono); }
 
-  input[type="password"]:focus, input[type="text"]:focus {
+  input[type="password"]:focus, input[type="text"]:focus,
+  input[type="number"]:focus, select:focus {
     outline: none;
-    border-color: var(--violet-2);
-    box-shadow: 0 0 0 3px #7c3aed33;
+    border-color: var(--violet);
+    box-shadow: 0 0 0 3px oklch(66% 0.19 var(--hue) / 0.22);
   }
 
   .toggle-visibility {
     position: absolute;
-    right: 10px;
+    right: 8px;
     background: none;
     border: none;
-    color: var(--muted);
+    color: var(--text-2);
     cursor: pointer;
     padding: 6px;
     display: flex;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
   }
 
-  .toggle-visibility:hover { color: var(--text); background: #ffffff10; }
+  .toggle-visibility:hover { color: var(--text-0); background: var(--bg-raised); }
 
-  input.checking { border-color: #ffffff30; }
-  input.valid { border-color: #4ade8066; }
-  input.invalid { border-color: #f8717166; }
+  input.checking { border-color: var(--border-strong); }
+  input.valid { border-color: oklch(76% 0.16 152 / 0.55); }
+  input.invalid { border-color: oklch(69% 0.19 24 / 0.55); }
 
   .field-status {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.76rem;
-    margin-top: 7px;
+    gap: var(--sp-2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    margin-top: var(--sp-2);
     min-height: 15px;
-    color: var(--muted);
+    color: var(--text-2);
   }
 
-  .field-status svg { width: 13px; height: 13px; flex-shrink: 0; }
-  .field-status.valid { color: #4ade80; }
-  .field-status.invalid { color: #f87171; }
+  .field-status svg { width: 12px; height: 12px; flex-shrink: 0; }
+  .field-status.valid { color: var(--success); }
+  .field-status.invalid { color: var(--danger); }
 
   .spinner {
-    width: 12px;
-    height: 12px;
+    width: 11px;
+    height: 11px;
     border-radius: 50%;
-    border: 2px solid #ffffff2a;
+    border: 2px solid var(--border-strong);
     border-top-color: var(--violet);
     animation: spin 0.6s linear infinite;
     flex-shrink: 0;
@@ -188,169 +327,181 @@
 
   button.primary {
     width: 100%;
-    margin-top: 10px;
+    margin-top: var(--sp-2);
     padding: 13px;
-    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    font-family: var(--font-sans);
+    font-size: var(--fs-sm);
     font-weight: 600;
-    border-radius: 10px;
-    border: none;
-    color: white;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--violet-strong);
+    color: oklch(98% 0.01 var(--hue));
     cursor: pointer;
-    background: linear-gradient(135deg, var(--violet), var(--blue));
-    box-shadow: 0 8px 24px -8px #7c3aedaa;
-    transition: transform 0.12s, box-shadow 0.12s;
+    background: var(--violet-strong);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.16);
+    transition: background 0.12s, transform 0.12s;
   }
 
-  button.primary:hover { transform: translateY(-1px); box-shadow: 0 10px 28px -8px #7c3aedcc; }
+  button.primary svg { width: 15px; height: 15px; transition: transform 0.15s; }
+  button.primary:hover { background: var(--violet); transform: translateY(-1px); }
+  button.primary:hover svg { transform: translateX(2px); }
   button.primary:active { transform: translateY(0); }
   button.primary:disabled {
-    opacity: 0.65;
+    opacity: 0.55;
     cursor: not-allowed;
     transform: none;
-    box-shadow: none;
   }
 
-  #result {
-    display: none;
-    margin-top: 28px;
-    padding-top: 24px;
-    border-top: 1px solid var(--border);
+  #result { display: none; }
+
+  .readout {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--success);
+    margin-bottom: var(--sp-3);
   }
 
-  .row { display: flex; gap: 8px; }
+  .readout .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 3px oklch(76% 0.16 152 / 0.2);
+  }
+
+  .row { display: flex; gap: var(--sp-2); }
 
   #result-url {
     flex: 1;
-    font-family: "SF Mono", ui-monospace, Menlo, monospace;
-    font-size: 0.78rem;
+    font-size: var(--fs-xs);
     padding: 10px 12px;
   }
 
   .icon-btn {
     flex-shrink: 0;
-    width: 42px;
+    width: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     border: 1px solid var(--border);
-    border-radius: 10px;
-    background: #ffffff08;
-    color: var(--muted);
+    border-radius: var(--radius-sm);
+    background: var(--bg-2);
+    color: var(--text-1);
     cursor: pointer;
-    transition: background 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
 
-  .icon-btn:hover { background: #ffffff14; color: var(--text); }
-  .icon-btn.copied { color: #4ade80; border-color: #4ade8055; }
+  .icon-btn:hover { background: var(--bg-raised); color: var(--text-0); border-color: var(--border-strong); }
+  .icon-btn.copied { color: var(--success); border-color: oklch(76% 0.16 152 / 0.4); }
 
-  .links { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .links { margin-top: var(--sp-3); display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 
   a.btn, button.btn {
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 7px;
+    gap: var(--sp-2);
     padding: 10px 14px;
-    border-radius: 10px;
-    background: #ffffff0d;
+    border-radius: var(--radius-sm);
+    background: var(--bg-2);
     border: 1px solid var(--border);
-    color: var(--text);
+    color: var(--text-0);
     text-decoration: none;
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
     font-weight: 500;
     white-space: nowrap;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
   }
 
-  a.btn:hover, button.btn:hover { background: #ffffff1a; border-color: var(--border-strong); }
+  a.btn:hover, button.btn:hover { background: var(--bg-raised); border-color: var(--violet); }
   a.btn svg, button.btn svg { width: 15px; height: 15px; }
-  button.btn.copied { color: #4ade80; border-color: #4ade8055; }
+  button.btn.copied { color: var(--success); border-color: oklch(76% 0.16 152 / 0.4); }
 
   p.hint {
-    margin: 10px 0 0;
-    font-size: 0.76rem;
-    color: var(--muted);
-    line-height: 1.45;
+    margin: var(--sp-3) 0 0;
+    font-size: var(--fs-xs);
+    color: var(--text-2);
+    line-height: 1.5;
   }
 
-  p.hint strong { color: var(--text); font-weight: 600; }
+  p.hint strong { color: var(--text-1); font-weight: 600; }
 
   .warning {
     display: flex;
-    gap: 10px;
-    margin-top: 16px;
-    padding: 12px 14px;
-    border-radius: 10px;
-    background: var(--danger-bg);
-    border: 1px solid var(--danger-border);
-    font-size: 0.8rem;
-    color: #d8c3f0;
+    gap: var(--sp-3);
+    margin-top: var(--sp-4);
+    padding: var(--sp-3) var(--sp-4);
+    border-radius: var(--radius-sm);
+    background: var(--violet-wash);
+    border: 1px solid var(--border-strong);
   }
 
-  .warning svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; color: #c084fc; }
+  .warning svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; color: var(--violet-soft); }
 
-  #custom-streams-section {
-    margin-top: 28px;
-    padding-top: 24px;
-    border-top: 1px solid var(--border);
+  .warning-body strong {
+    display: block;
+    font-size: var(--fs-xs);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-0);
+    margin-bottom: 3px;
   }
 
-  .cs-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .warning-body span {
+    font-size: var(--fs-xs);
+    color: var(--text-1);
+    line-height: 1.5;
+  }
+
+  /* ---------- custom streams ---------- */
+
+  .cs-row { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-3); }
   .cs-row > * { flex: 1; min-width: 0; }
 
-  input.plain, select.plain {
-    width: 100%;
-    padding: 12px 14px;
-    font-size: 0.95rem;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: #ffffff08;
-    color: var(--text);
-    transition: border-color 0.15s, box-shadow 0.15s;
-  }
-
-  input.plain:focus, select.plain:focus {
-    outline: none;
-    border-color: var(--violet-2);
-    box-shadow: 0 0 0 3px #7c3aed33;
-  }
-
-  select.plain option { background: var(--bg-1); color: var(--text); }
+  select.plain option { background: var(--bg-1); color: var(--text-0); }
 
   #cs-add-btn {
     width: 100%;
     justify-content: center;
-    margin-top: 4px;
+    margin-top: var(--sp-1);
   }
 
-  #cs-list { margin-top: 18px; }
+  #cs-list { margin-top: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-2); }
 
   .cs-item {
+    container-type: inline-size;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    margin-bottom: 8px;
-    background: #ffffff05;
+    border-radius: var(--radius-sm);
+    background: var(--bg-2);
   }
 
   .cs-item img {
-    width: 36px;
-    height: 54px;
+    width: 34px;
+    height: 51px;
     object-fit: cover;
-    border-radius: 4px;
-    background: #ffffff10;
+    border-radius: 2px;
+    background: var(--bg-raised);
     flex-shrink: 0;
   }
 
   .cs-item-info { flex: 1; min-width: 0; }
 
   .cs-item-name {
-    font-size: 0.88rem;
+    font-size: var(--fs-sm);
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
@@ -358,8 +509,9 @@
   }
 
   .cs-item-meta {
-    font-size: 0.74rem;
-    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text-2);
     margin-top: 2px;
     white-space: nowrap;
     overflow: hidden;
@@ -367,8 +519,10 @@
   }
 
   .cs-item-ttl {
-    font-size: 0.72rem;
-    color: var(--violet);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--violet-soft);
     flex-shrink: 0;
     white-space: nowrap;
     text-align: right;
@@ -376,143 +530,225 @@
 
   .cs-item-remove {
     flex-shrink: 0;
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
     border: 1px solid var(--border);
-    border-radius: 8px;
-    background: #ffffff08;
-    color: var(--muted);
+    border-radius: var(--radius-sm);
+    background: var(--bg-1);
+    color: var(--text-2);
     cursor: pointer;
   }
 
-  .cs-item-remove:hover { background: #f8717122; color: #f87171; border-color: #f8717155; }
-  .cs-item-remove svg { width: 14px; height: 14px; }
+  .cs-item-remove:hover { background: oklch(69% 0.19 24 / 0.14); color: var(--danger); border-color: oklch(69% 0.19 24 / 0.4); }
+  .cs-item-remove svg { width: 13px; height: 13px; }
+
+  @container (max-width: 260px) {
+    .cs-item { flex-wrap: wrap; }
+    .cs-item-ttl { order: 3; margin-left: 46px; }
+  }
 
   .cs-empty {
-    font-size: 0.82rem;
-    color: var(--muted);
+    font-size: var(--fs-sm);
+    color: var(--text-2);
     text-align: center;
-    padding: 16px 0;
+    padding: var(--sp-4) 0;
   }
 
   #custom-streams-section.disabled {
     opacity: 0.5;
     pointer-events: none;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 </style>
 </head>
 <body>
-  <div class="card">
-    <div class="brand">
-      <img src="/logo.png?v=__LOGO_VERSION__" alt="MyTorbox logo">
-      <h1>MyTorbox</h1>
-    </div>
-    <p class="sub">Connect your TorBox account to generate a personal Stremio install link. Nothing is stored on this server — your keys are encoded into the addon URL itself.</p>
-
-    <div class="field">
-      <label for="torbox">TorBox API Key</label>
-      <div class="input-wrap">
-        <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-        <input type="password" id="torbox" placeholder="8976-5a24-4230-...">
-        <button type="button" class="toggle-visibility" data-target="torbox" aria-label="Show key">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
-      </div>
-      <div class="field-status" id="torbox-status"></div>
-    </div>
-
-    <div class="field">
-      <label for="tmdb">TMDB API Key</label>
-      <div class="input-wrap">
-        <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-        <input type="password" id="tmdb" placeholder="e6fbedc39581f5...">
-        <button type="button" class="toggle-visibility" data-target="tmdb" aria-label="Show key">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
-      </div>
-      <div class="field-status" id="tmdb-status"></div>
-    </div>
-
-    <div class="field">
-      <label for="rpdb">RPDB API Key <span><span class="optional">optional</span> · <a href="https://ratingposterdb.com/api-key/" target="_blank" rel="noopener">get a key</a></span></label>
-      <div class="input-wrap">
-        <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-        <input type="password" id="rpdb" placeholder="t0-free-rpdb key for rated posters">
-        <button type="button" class="toggle-visibility" data-target="rpdb" aria-label="Show key">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
-      </div>
-      <div class="field-status" id="rpdb-status"></div>
-    </div>
-
-    <button class="primary" id="generate-btn" onclick="onGenerateClick()">Generate Install Link</button>
-
-    <div id="result">
-      <label>Manifest URL</label>
-      <div class="row">
-        <input type="text" id="result-url" readonly>
-        <button class="icon-btn" id="copy-btn" onclick="copyUrl()" aria-label="Copy">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        </button>
-      </div>
-      <div class="links">
-        <a class="btn" id="stremio-link" href="#">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l14 0M13 6l6 6-6 6"/></svg>
-          Install in Stremio
-        </a>
-        <button class="btn" id="nuvio-btn" type="button" onclick="copyForNuvio()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Install in Nuvio
-        </button>
-      </div>
-      <p class="hint" id="nuvio-hint">Nuvio has no direct install link — tap "Install in Nuvio" to copy the URL, then in the app go to <strong>Settings → Addons → Add Addon</strong> and paste it.</p>
-      <div class="warning">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-        <span>Anyone with this URL can access your TorBox library, treat it like a password.</span>
-      </div>
-    </div>
-
-    <div id="custom-streams-section" class="disabled">
-      <label>Custom Streams <span><span class="optional">each entry expires on its own schedule</span></span></label>
-      <p class="hint" style="margin-bottom: 14px;">Add your own IMDb id + stream URL — it appears as a separate "Custom Streams" catalogue in Stremio and deletes itself when its TTL runs out.</p>
-
-      <button class="btn" id="cs-toggle-btn" type="button" onclick="toggleCustomStreamForm()">+ Add Custom Stream</button>
-
-      <div id="cs-add-form" style="display: none;">
-        <div class="cs-row">
-          <input type="text" class="plain" id="cs-imdb" placeholder="IMDb id, e.g. tt1234567">
-          <select class="plain" id="cs-type" onchange="onCustomTypeChange()">
-            <option value="movie">Movie</option>
-            <option value="series">Series</option>
-          </select>
+  <div class="page">
+    <aside class="rail">
+      <div class="rail-brand">
+        <img src="/logo.png?v=__LOGO_VERSION__" alt="" class="rail-logo">
+        <div class="rail-word">
+          <h1>MyTorbox</h1>
+          <p class="kicker">Stremio Addon Configuration</p>
         </div>
-        <div class="cs-row" id="cs-episode-fields" style="display: none;">
-          <input type="number" class="plain" id="cs-season" placeholder="Season" min="0">
-          <input type="number" class="plain" id="cs-episode" placeholder="Episode" min="1">
-        </div>
-        <div class="cs-row">
-          <input type="text" class="plain" id="cs-url" placeholder="https://... direct stream URL">
-        </div>
-        <div class="cs-row">
-          <input type="text" class="plain" id="cs-title" placeholder="Title (optional)">
-          <select class="plain" id="cs-ttl">
-            <option value="1800">Expires in 30m</option>
-            <option value="3600">Expires in 1h</option>
-            <option value="10800" selected>Expires in 3h</option>
-            <option value="21600">Expires in 6h</option>
-            <option value="43200">Expires in 12h</option>
-            <option value="86400">Expires in 24h</option>
-          </select>
-        </div>
-        <div class="field-status" id="cs-add-status"></div>
-        <button class="btn" id="cs-add-btn" type="button" onclick="onAddCustomStream()">Add Custom Stream</button>
       </div>
+      <p class="rail-desc">Generates a personal manifest URL from your TorBox and TMDB credentials. Keys are embedded client-side, nothing is persisted on this server.</p>
+      <nav class="rail-nav" aria-label="Sections">
+        <a href="#sec-identity"><span class="tag">01</span>Identity</a>
+        <a href="#sec-metadata"><span class="tag">02</span>Metadata</a>
+        <a href="#sec-posters"><span class="tag">03</span>Posters</a>
+        <a href="#sec-output"><span class="tag">04</span>Output</a>
+        <a href="#sec-custom"><span class="tag">05</span>Custom Streams</a>
+      </nav>
+      <p class="rail-foot">Stremio addon for browsing a TorBox library. No accounts, no server-side tracking.</p>
+    </aside>
 
-      <div id="cs-list"></div>
-    </div>
+    <main class="panel">
+      <i class="corner tl" aria-hidden="true"></i>
+      <i class="corner tr" aria-hidden="true"></i>
+      <i class="corner bl" aria-hidden="true"></i>
+      <i class="corner br" aria-hidden="true"></i>
+
+      <section class="section" id="sec-identity">
+        <div class="section-head">
+          <span class="tag">01</span>
+          <div>
+            <label for="torbox">TorBox API Key <span class="badge required">Required</span></label>
+            <p class="section-hint">Grants read access to your TorBox library. <a href="https://torbox.app/settings" target="_blank" rel="noopener">Get a key →</a></p>
+          </div>
+        </div>
+        <div class="input-wrap">
+          <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          <input type="password" id="torbox" placeholder="8976-5a24-4230-..." autocomplete="off" spellcheck="false">
+          <button type="button" class="toggle-visibility" data-target="torbox" aria-label="Show key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="field-status" id="torbox-status"></div>
+      </section>
+
+      <div class="hr"></div>
+
+      <section class="section" id="sec-metadata">
+        <div class="section-head">
+          <span class="tag">02</span>
+          <div>
+            <label for="tmdb">TMDB API Key <span class="badge required">Required</span></label>
+            <p class="section-hint">Resolves titles, artwork, and metadata. <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Get a key →</a></p>
+          </div>
+        </div>
+        <div class="input-wrap">
+          <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          <input type="password" id="tmdb" placeholder="e6fbedc39581f5..." autocomplete="off" spellcheck="false">
+          <button type="button" class="toggle-visibility" data-target="tmdb" aria-label="Show key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="field-status" id="tmdb-status"></div>
+      </section>
+
+      <div class="hr"></div>
+
+      <section class="section" id="sec-posters">
+        <div class="section-head">
+          <span class="tag">03</span>
+          <div>
+            <label for="rpdb">RPDB API Key <span class="badge optional">Optional</span></label>
+            <p class="section-hint">Adds rated poster artwork. <a href="https://ratingposterdb.com/api-key/" target="_blank" rel="noopener">Get a key →</a></p>
+          </div>
+        </div>
+        <div class="input-wrap">
+          <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          <input type="password" id="rpdb" placeholder="t0-free-rpdb key" autocomplete="off" spellcheck="false">
+          <button type="button" class="toggle-visibility" data-target="rpdb" aria-label="Show key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="field-status" id="rpdb-status"></div>
+      </section>
+
+      <button class="primary" id="generate-btn" onclick="onGenerateClick()">
+        Generate Install Link
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+
+      <div class="hr" style="margin-top: 32px;"></div>
+
+      <section class="section" id="sec-output">
+        <div class="section-head">
+          <span class="tag">04</span>
+          <div>
+            <label>Output</label>
+            <p class="section-hint">Your manifest URL and install links appear here once the keys above validate.</p>
+          </div>
+        </div>
+
+        <div id="result">
+          <div class="readout"><span class="dot"></span>Manifest ready</div>
+          <div class="row">
+            <input type="text" id="result-url" readonly>
+            <button class="icon-btn" id="copy-btn" onclick="copyUrl()" aria-label="Copy">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
+          <div class="links">
+            <a class="btn" id="stremio-link" href="#">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l14 0M13 6l6 6-6 6"/></svg>
+              Install in Stremio
+            </a>
+            <button class="btn" id="nuvio-btn" type="button" onclick="copyForNuvio()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Install in Nuvio
+            </button>
+          </div>
+          <p class="hint" id="nuvio-hint">Nuvio has no direct install link — tap "Install in Nuvio" to copy the URL, then in the app go to <strong>Settings → Addons → Add Addon</strong> and paste it.</p>
+          <div class="warning">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+            <div class="warning-body">
+              <strong>Handle as a password</strong>
+              <span>Anyone with this URL can access your TorBox library.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="hr"></div>
+
+      <section class="section" id="sec-custom">
+        <div class="section-head">
+          <span class="tag">05</span>
+          <div>
+            <label>Custom Streams</label>
+            <p class="section-hint">Add your own IMDb id + stream URL — it appears as a separate catalogue in Stremio and deletes itself when its TTL runs out.</p>
+          </div>
+        </div>
+
+        <div id="custom-streams-section" class="disabled">
+          <button class="btn" id="cs-toggle-btn" type="button" onclick="toggleCustomStreamForm()">+ Add Custom Stream</button>
+
+          <div id="cs-add-form" style="display: none; margin-top: var(--sp-4);">
+            <div class="cs-row">
+              <input type="text" class="plain" id="cs-imdb" placeholder="IMDb id, e.g. tt1234567">
+              <select class="plain" id="cs-type" onchange="onCustomTypeChange()">
+                <option value="movie">Movie</option>
+                <option value="series">Series</option>
+              </select>
+            </div>
+            <div class="cs-row" id="cs-episode-fields" style="display: none;">
+              <input type="number" class="plain" id="cs-season" placeholder="Season" min="0">
+              <input type="number" class="plain" id="cs-episode" placeholder="Episode" min="1">
+            </div>
+            <div class="cs-row">
+              <input type="text" class="plain" id="cs-url" placeholder="https://... direct stream URL">
+            </div>
+            <div class="cs-row">
+              <input type="text" class="plain" id="cs-title" placeholder="Title (optional)">
+              <select class="plain" id="cs-ttl">
+                <option value="1800">Expires in 30m</option>
+                <option value="3600">Expires in 1h</option>
+                <option value="10800" selected>Expires in 3h</option>
+                <option value="21600">Expires in 6h</option>
+                <option value="43200">Expires in 12h</option>
+                <option value="86400">Expires in 24h</option>
+              </select>
+            </div>
+            <div class="field-status" id="cs-add-status"></div>
+            <button class="btn" id="cs-add-btn" type="button" onclick="onAddCustomStream()">Add Custom Stream</button>
+          </div>
+
+          <div id="cs-list"></div>
+        </div>
+      </section>
+    </main>
   </div>
 
 <script>
