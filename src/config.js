@@ -4,7 +4,8 @@ const DEFAULT_TORBOX_API_KEY = process.env.TORBOX_API_KEY || null
 const DEFAULT_TMDB_API_KEY = process.env.TMDB_API_KEY || null
 const DEFAULT_RPDB_API_KEY = process.env.RPDB_API_KEY || null
 
-const BASE_URL = (process.env.BASE_URL || '').replace(/\/$/, '')
+const VERCEL_URL = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL
+const BASE_URL = (process.env.BASE_URL || (VERCEL_URL ? `https://${VERCEL_URL}` : '')).replace(/\/$/, '')
 const PORT = parseInt(process.env.PORT || '7000', 10)
 
 const TORBOX_BASE = 'https://api.torbox.app/v1/api'
