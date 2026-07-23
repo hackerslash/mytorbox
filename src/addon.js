@@ -1,4 +1,3 @@
-const { addonBuilder } = require('stremio-addon-sdk')
 const config = require('./config')
 const { getLibrary } = require('./library')
 const { buildCustomCatalog } = require('./customCatalog')
@@ -52,9 +51,7 @@ function resolveKeys(cfg) {
   return null
 }
 
-const builder = new addonBuilder(manifest)
-
-builder.defineCatalogHandler(async ({ type, id, config: cfg }) => {
+async function getCatalog({ type, id, config: cfg }) {
   const keys = resolveKeys(cfg)
   if (!keys) return { metas: [] }
 
@@ -69,40 +66,40 @@ builder.defineCatalogHandler(async ({ type, id, config: cfg }) => {
   if (type === 'movie' && id === 'torbox-movies') return { metas: lib.movies }
   if (type === 'series' && id === 'torbox-series') return { metas: lib.series }
   return { metas: [] }
-})
+}
 
-builder.defineMetaHandler(async ({ type, id, config: cfg }) => {
+async function getMeta({ type, id, config: cfg }) {
   const keys = resolveKeys(cfg)
-  if (!keys) return Promise.reject({ noHandler: true })
+  if (!keys) return null
 
   if (id.startsWith('tb:custom:')) {
     const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
     const item = custom.meta[id]
-    if (!item || item.type !== type) return Promise.reject({ noHandler: true })
+    if (!item || item.type !== type) return null
     return { meta: item }
   }
 
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
   const item = lib.meta[id]
-  if (!item || item.type !== type) return Promise.reject({ noHandler: true })
+  if (!item || item.type !== type) return null
   return { meta: item }
-})
+}
 
-builder.defineStreamHandler(async ({ type, id, config: cfg }) => {
+async function getStream({ type, id, config: cfg }) {
   const keys = resolveKeys(cfg)
   if (!keys) return { streams: [] }
 
   if (id.startsWith('tb:custom:')) {
     const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
     const streams = custom.streams[id]
-    if (!streams) return Promise.reject({ noHandler: true })
+    if (!streams) return null
     return { streams }
   }
 
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
   const streams = lib.streams[id]
-  if (!streams) return Promise.reject({ noHandler: true })
+  if (!streams) return null
   return { streams }
-})
+}
 
-module.exports = { builder, manifest, HAS_DEFAULTS }
+module.exports = { manifest, HAS_DEFAULTS, getCatalog, getMeta, getStream }

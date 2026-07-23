@@ -2,8 +2,7 @@ const path = require('path')
 const fs = require('fs')
 const express = require('express')
 const cors = require('cors')
-const { getRouter } = require('stremio-addon-sdk')
-const { builder } = require('./addon')
+const addon = require('./addon')
 const validators = require('./validators')
 const library = require('./library')
 const tmdb = require('./tmdb')
@@ -165,6 +164,78 @@ app.get('/logo.png', (req, res) => {
   res.sendFile(LOGO_PATH)
 })
 
-app.use(getRouter(builder.getInterface()))
+// --- Stremio addon protocol (manifest/catalog/meta/stream) ---
+// Hand-rolled instead of stremio-addon-sdk's router: the SDK silently deletes
+// behaviorHints.configurable/configurationRequired from any manifest fetched
+// through a URL that already has a :config segment (its own getRouter.js),
+// which is exactly the URL this addon's install links use. We want manifest.js
+// served byte-for-byte as defined in addon.js, always.
+
+function stripJsonExt(s) {
+  return s.endsWith('.json') ? s.slice(0, -5) : s
+}
+
+function manifestHandler(req, res) {
+  res.type('application/json').send(JSON.stringify(addon.manifest))
+}
+
+app.get('/manifest.json', manifestHandler)
+app.get('/:config/manifest.json', manifestHandler)
+
+async function catalogHandler(req, res) {
+  const cfg = req.params.config ? decodeConfigParam(req.params.config) : null
+  const type = req.params.type
+  const id = stripJsonExt(req.params.idWithExt)
+  try {
+    const result = await addon.getCatalog({ type, id, config: cfg })
+    res.type('application/json').send(JSON.stringify(result))
+  } catch (err) {
+    console.error('catalog handler error:', err)
+    res.status(500).json({ err: 'handler error' })
+  }
+}
+
+async function metaHandler(req, res) {
+  const cfg = req.params.config ? decodeConfigParam(req.params.config) : null
+  const type = req.params.type
+  const id = stripJsonExt(req.params.idWithExt)
+  try {
+    const result = await addon.getMeta({ type, id, config: cfg })
+    if (!result) {
+      res.status(404).json({ err: 'not found' })
+      return
+    }
+    res.type('application/json').send(JSON.stringify(result))
+  } catch (err) {
+    console.error('meta handler error:', err)
+    res.status(500).json({ err: 'handler error' })
+  }
+}
+
+async function streamHandler(req, res) {
+  const cfg = req.params.config ? decodeConfigParam(req.params.config) : null
+  const type = req.params.type
+  const id = stripJsonExt(req.params.idWithExt)
+  try {
+    const result = await addon.getStream({ type, id, config: cfg })
+    if (!result) {
+      res.status(404).json({ err: 'not found' })
+      return
+    }
+    res.type('application/json').send(JSON.stringify(result))
+  } catch (err) {
+    console.error('stream handler error:', err)
+    res.status(500).json({ err: 'handler error' })
+  }
+}
+
+app.get('/catalog/:type/:idWithExt', catalogHandler)
+app.get('/:config/catalog/:type/:idWithExt', catalogHandler)
+
+app.get('/meta/:type/:idWithExt', metaHandler)
+app.get('/:config/meta/:type/:idWithExt', metaHandler)
+
+app.get('/stream/:type/:idWithExt', streamHandler)
+app.get('/:config/stream/:type/:idWithExt', streamHandler)
 
 module.exports = app
