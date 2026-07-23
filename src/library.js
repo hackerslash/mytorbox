@@ -134,7 +134,14 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey) {
   const moviesMerged = dedupeByTmdb(movieKeys, movieResults, mergeMovieGroups).sort(byCreatedAtDesc)
   const seriesMerged = dedupeByTmdb(seriesKeys, seriesResults, mergeSeriesGroups).sort(byCreatedAtDesc)
 
-  for (const [canonical, g, tmdbRes] of moviesMerged) {
+  const movieImages = await mapLimit(moviesMerged, TMDB_CONCURRENCY, ([, , tmdbRes]) =>
+    tmdbRes ? tmdb.getImages('movie', tmdbRes.id, tmdbKey) : null
+  )
+  const seriesImages = await mapLimit(seriesMerged, TMDB_CONCURRENCY, ([, , tmdbRes]) =>
+    tmdbRes ? tmdb.getImages('tv', tmdbRes.id, tmdbKey) : null
+  )
+
+  moviesMerged.forEach(([canonical, g, tmdbRes], i) => {
     const mid = `tb:movie:${canonical}`
     const year = g.year || (tmdbRes && tmdbRes.release_date ? tmdbRes.release_date.slice(0, 4) : null)
     const preview = {
@@ -144,12 +151,14 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey) {
       poster: posterUrlFor(tmdbRes, 'movie', rpdbKey),
     }
     if (year) preview.releaseInfo = String(year)
+    const logo = tmdb.logoUrl(movieImages[i], tmdbRes && tmdbRes.original_language)
+    if (logo) preview.logo = logo
     lib.movies.push(preview)
     lib.meta[mid] = { ...preview, description: tmdbRes ? tmdbRes.overview : null }
     lib.streams[mid] = sortedBySize(g.items).map((w) => streamDict(w, torboxKey))
-  }
+  })
 
-  for (const [canonical, g, tmdbRes] of seriesMerged) {
+  seriesMerged.forEach(([canonical, g, tmdbRes], i) => {
     const sid = `tb:series:${canonical}`
     const year = g.year || (tmdbRes && tmdbRes.first_air_date ? tmdbRes.first_air_date.slice(0, 4) : null)
     const preview = {
@@ -159,6 +168,8 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey) {
       poster: posterUrlFor(tmdbRes, 'series', rpdbKey),
     }
     if (year) preview.releaseInfo = String(year)
+    const logo = tmdb.logoUrl(seriesImages[i], tmdbRes && tmdbRes.original_language)
+    if (logo) preview.logo = logo
 
     const videos = []
     const epKeysSorted = [...g.episodes.keys()].sort((a, b) => {
@@ -181,7 +192,7 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey) {
 
     lib.series.push(preview)
     lib.meta[sid] = { ...preview, videos, description: tmdbRes ? tmdbRes.overview : null }
-  }
+  })
 
   return lib
 }

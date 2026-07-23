@@ -2,6 +2,7 @@ const { TMDB_BASE, TMDB_IMAGE_BASE } = require('./config')
 const { getJson } = require('./httpUtils')
 
 const cache = new Map()
+const imagesCache = new Map()
 
 async function searchOnce(title, year, kind, apiKey) {
   const params = new URLSearchParams({ api_key: apiKey, query: title })
@@ -31,8 +32,33 @@ function posterUrl(result) {
   return `${TMDB_IMAGE_BASE}${result.poster_path}`
 }
 
-function clearCache() {
-  cache.clear()
+async function getImages(kind, tmdbId, apiKey) {
+  const key = `${kind}:${tmdbId}`
+  if (imagesCache.has(key)) return imagesCache.get(key)
+
+  let result = null
+  try {
+    result = await getJson(`${TMDB_BASE}/${kind}/${tmdbId}/images?api_key=${apiKey}`)
+  } catch {
+    result = null
+  }
+
+  imagesCache.set(key, result)
+  return result
 }
 
-module.exports = { search, posterUrl, clearCache }
+/** Prefer a logo in the title's own language, then a language-neutral one, then English. */
+function logoUrl(images, originalLanguage) {
+  const logos = (images && images.logos) || []
+  if (!logos.length) return null
+  const byLang = (lang) => logos.find((l) => l.iso_639_1 === lang)
+  const chosen = byLang(originalLanguage) || byLang(null) || byLang('en') || logos[0]
+  return chosen ? `${TMDB_IMAGE_BASE}${chosen.file_path}` : null
+}
+
+function clearCache() {
+  cache.clear()
+  imagesCache.clear()
+}
+
+module.exports = { search, posterUrl, getImages, logoUrl, clearCache }
