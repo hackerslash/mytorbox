@@ -1,8 +1,16 @@
 const crypto = require('crypto')
 const redis = require('./redisClient')
-const { CUSTOM_STREAM_TTL_MS, MAX_CUSTOM_STREAMS_PER_KEY } = require('./config')
+const {
+  CUSTOM_STREAM_DEFAULT_TTL_MS,
+  CUSTOM_STREAM_MIN_TTL_MS,
+  CUSTOM_STREAM_MAX_TTL_MS,
+  MAX_CUSTOM_STREAMS_PER_KEY,
+} = require('./config')
 
-const TTL_SECONDS = Math.floor(CUSTOM_STREAM_TTL_MS / 1000)
+function clampTtlMs(ttlMs) {
+  if (!Number.isFinite(ttlMs)) return CUSTOM_STREAM_DEFAULT_TTL_MS
+  return Math.min(Math.max(ttlMs, CUSTOM_STREAM_MIN_TTL_MS), CUSTOM_STREAM_MAX_TTL_MS)
+}
 
 function userKeyFor(torboxKey, tmdbKey, rpdbKey) {
   return `${torboxKey}|${tmdbKey}|${rpdbKey || ''}`
@@ -36,8 +44,11 @@ async function addCustomStream(torboxKey, tmdbKey, rpdbKey, entry) {
     const count = await redis.zcard(idx)
     if (count >= MAX_CUSTOM_STREAMS_PER_KEY) return null
 
+    const ttlMs = clampTtlMs(entry.ttlMs)
+    const ttlSeconds = Math.floor(ttlMs / 1000)
+
     const id = crypto.randomUUID()
-    const expiresAt = now + CUSTOM_STREAM_TTL_MS
+    const expiresAt = now + ttlMs
     const stored = {
       id,
       type: entry.type,
@@ -50,9 +61,9 @@ async function addCustomStream(torboxKey, tmdbKey, rpdbKey, entry) {
       expiresAt,
     }
 
-    await redis.set(entryKey(uKey, id), JSON.stringify(stored), 'EX', TTL_SECONDS)
+    await redis.set(entryKey(uKey, id), JSON.stringify(stored), 'EX', ttlSeconds)
     await redis.zadd(idx, expiresAt, id)
-    await redis.expire(idx, TTL_SECONDS + 60)
+    await redis.expire(idx, ttlSeconds + 60)
 
     return stored
   } catch (err) {

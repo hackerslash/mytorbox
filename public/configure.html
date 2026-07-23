@@ -471,33 +471,45 @@
       <p class="hint" id="nuvio-hint">Nuvio has no direct install link — tap "Install in Nuvio" to copy the URL, then in the app go to <strong>Settings → Addons → Add Addon</strong> and paste it.</p>
       <div class="warning">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-        <span>Anyone with this URL can access your TorBox library — treat it like a password.</span>
+        <span>Anyone with this URL can access your TorBox library, treat it like a password.</span>
       </div>
     </div>
 
     <div id="custom-streams-section" class="disabled">
-      <label>Custom Streams <span><span class="optional">each entry expires after 3 hours</span></span></label>
-      <p class="hint" style="margin-bottom: 14px;">Add your own IMDb id + stream URL — it appears as a separate "Custom Streams" catalogue in Stremio and deletes itself 3 hours later.</p>
+      <label>Custom Streams <span><span class="optional">each entry expires on its own schedule</span></span></label>
+      <p class="hint" style="margin-bottom: 14px;">Add your own IMDb id + stream URL — it appears as a separate "Custom Streams" catalogue in Stremio and deletes itself when its TTL runs out.</p>
 
-      <div class="cs-row">
-        <input type="text" class="plain" id="cs-imdb" placeholder="IMDb id, e.g. tt1234567">
-        <select class="plain" id="cs-type" onchange="onCustomTypeChange()">
-          <option value="movie">Movie</option>
-          <option value="series">Series</option>
-        </select>
+      <button class="btn" id="cs-toggle-btn" type="button" onclick="toggleCustomStreamForm()">+ Add Custom Stream</button>
+
+      <div id="cs-add-form" style="display: none;">
+        <div class="cs-row">
+          <input type="text" class="plain" id="cs-imdb" placeholder="IMDb id, e.g. tt1234567">
+          <select class="plain" id="cs-type" onchange="onCustomTypeChange()">
+            <option value="movie">Movie</option>
+            <option value="series">Series</option>
+          </select>
+        </div>
+        <div class="cs-row" id="cs-episode-fields" style="display: none;">
+          <input type="number" class="plain" id="cs-season" placeholder="Season" min="0">
+          <input type="number" class="plain" id="cs-episode" placeholder="Episode" min="1">
+        </div>
+        <div class="cs-row">
+          <input type="text" class="plain" id="cs-url" placeholder="https://... direct stream URL">
+        </div>
+        <div class="cs-row">
+          <input type="text" class="plain" id="cs-title" placeholder="Title (optional)">
+          <select class="plain" id="cs-ttl">
+            <option value="1800">Expires in 30m</option>
+            <option value="3600">Expires in 1h</option>
+            <option value="10800" selected>Expires in 3h</option>
+            <option value="21600">Expires in 6h</option>
+            <option value="43200">Expires in 12h</option>
+            <option value="86400">Expires in 24h</option>
+          </select>
+        </div>
+        <div class="field-status" id="cs-add-status"></div>
+        <button class="btn" id="cs-add-btn" type="button" onclick="onAddCustomStream()">Add Custom Stream</button>
       </div>
-      <div class="cs-row" id="cs-episode-fields" style="display: none;">
-        <input type="number" class="plain" id="cs-season" placeholder="Season" min="0">
-        <input type="number" class="plain" id="cs-episode" placeholder="Episode" min="1">
-      </div>
-      <div class="cs-row">
-        <input type="text" class="plain" id="cs-url" placeholder="https://... direct stream URL">
-      </div>
-      <div class="cs-row">
-        <input type="text" class="plain" id="cs-title" placeholder="Title (optional)">
-      </div>
-      <div class="field-status" id="cs-add-status"></div>
-      <button class="btn" id="cs-add-btn" type="button" onclick="onAddCustomStream()">Add Custom Stream</button>
 
       <div id="cs-list"></div>
     </div>
@@ -646,6 +658,14 @@ function onCustomTypeChange() {
   document.getElementById('cs-episode-fields').style.display = isSeries ? 'flex' : 'none';
 }
 
+function toggleCustomStreamForm() {
+  const form = document.getElementById('cs-add-form');
+  const btn = document.getElementById('cs-toggle-btn');
+  const expanded = form.style.display !== 'none';
+  form.style.display = expanded ? 'none' : 'block';
+  btn.textContent = expanded ? '+ Add Custom Stream' : '− Close';
+}
+
 function formatRemaining(expiresAtMs) {
   const ms = expiresAtMs - Date.now();
   if (ms <= 0) return 'Expired';
@@ -757,6 +777,7 @@ async function onAddCustomStream() {
   const episode = document.getElementById('cs-episode').value;
   const streamUrl = document.getElementById('cs-url').value.trim();
   const title = document.getElementById('cs-title').value.trim();
+  const ttlSeconds = Number(document.getElementById('cs-ttl').value);
 
   const statusEl = document.getElementById('cs-add-status');
   statusEl.classList.remove('valid', 'invalid');
@@ -789,7 +810,7 @@ async function onAddCustomStream() {
       body: JSON.stringify({
         torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null,
         type, imdb_id: imdbId, season: season ? Number(season) : null, episode: episode ? Number(episode) : null,
-        stream_url: streamUrl, title: title || null,
+        stream_url: streamUrl, title: title || null, ttl_seconds: ttlSeconds,
       }),
     });
     const data = await res.json();
@@ -806,6 +827,7 @@ async function onAddCustomStream() {
     document.getElementById('cs-season').value = '';
     document.getElementById('cs-episode').value = '';
     loadCustomStreams();
+    setTimeout(toggleCustomStreamForm, 700);
   } catch (err) {
     statusEl.classList.add('invalid');
     statusEl.innerHTML = `${ICON_CROSS}<span>Request failed: ${err.message}</span>`;

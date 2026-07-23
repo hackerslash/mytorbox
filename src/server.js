@@ -7,6 +7,7 @@ const validators = require('./validators')
 const library = require('./library')
 const tmdb = require('./tmdb')
 const customStreams = require('./customStreams')
+const { CUSTOM_STREAM_MIN_TTL_MS, CUSTOM_STREAM_MAX_TTL_MS, CUSTOM_STREAM_DEFAULT_TTL_MS } = require('./config')
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public')
 const LOGO_PATH = path.join(PUBLIC_DIR, 'logo.png')
@@ -108,7 +109,7 @@ app.post('/api/custom-streams/list', async (req, res) => {
 app.post('/api/custom-streams/add', async (req, res) => {
   const {
     torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey,
-    type, imdb_id: imdbId, season, episode, stream_url: streamUrl, title,
+    type, imdb_id: imdbId, season, episode, stream_url: streamUrl, title, ttl_seconds: ttlSeconds,
   } = req.body || {}
 
   if (!torboxKey || !tmdbKey) {
@@ -137,9 +138,20 @@ app.post('/api/custom-streams/add', async (req, res) => {
     }
   }
 
+  const minTtlSec = Math.floor(CUSTOM_STREAM_MIN_TTL_MS / 1000)
+  const maxTtlSec = Math.floor(CUSTOM_STREAM_MAX_TTL_MS / 1000)
+  let ttlMs = CUSTOM_STREAM_DEFAULT_TTL_MS
+  if (ttlSeconds !== undefined && ttlSeconds !== null) {
+    const ttlSecondsNum = Number(ttlSeconds)
+    if (!Number.isInteger(ttlSecondsNum) || ttlSecondsNum < minTtlSec || ttlSecondsNum > maxTtlSec) {
+      return res.status(400).json({ ok: false, error: `ttl_seconds must be an integer between ${minTtlSec} and ${maxTtlSec}` })
+    }
+    ttlMs = ttlSecondsNum * 1000
+  }
+
   const trimmedTitle = typeof title === 'string' ? title.trim().slice(0, 200) : ''
   const entry = await customStreams.addCustomStream(torboxKey, tmdbKey, rpdbKey || null, {
-    type, imdbId, season: seasonNum, episode: episodeNum, streamUrl, title: trimmedTitle || null,
+    type, imdbId, season: seasonNum, episode: episodeNum, streamUrl, title: trimmedTitle || null, ttlMs,
   })
   if (!entry) {
     return res.status(400).json({ ok: false, error: 'Custom stream limit reached, or storage is not configured' })
