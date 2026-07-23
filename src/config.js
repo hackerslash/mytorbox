@@ -13,7 +13,7 @@ const TMDB_BASE = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500'
 const RPDB_BASE = 'https://api.ratingposterdb.com'
 
-const LIBRARY_TTL_MS = 300 * 1000
+const LIBRARY_TTL_MS = 30 * 60 * 1000
 const VIDEO_EXTENSIONS = new Set(['.mkv', '.mp4', '.avi', '.mov', '.m4v', '.webm', '.ts', '.flv'])
 const MIN_FILE_SIZE_BYTES = 500 * 1024 * 1024
 

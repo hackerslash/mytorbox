@@ -2,6 +2,7 @@ const { SOURCES, fetchMylist, buildStreamUrl } = require('./torbox')
 const { parseWorkItems, slugify } = require('./parser')
 const tmdb = require('./tmdb')
 const rpdb = require('./rpdb')
+const redis = require('./redisClient')
 const { LIBRARY_TTL_MS } = require('./config')
 
 const TMDB_CONCURRENCY = 5
@@ -197,32 +198,74 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey) {
   return lib
 }
 
-const cache = new Map() // `${torboxKey}|${tmdbKey}|${rpdbKey}` -> { lib, cachedAt }
+// Falls back to this in-process Map only when Redis isn't configured (e.g. local dev without REDIS_URL).
+const memCache = new Map() // `${torboxKey}|${tmdbKey}|${rpdbKey}` -> { lib, cachedAt }
 let buildLock = Promise.resolve()
+
+const LIBRARY_TTL_SECONDS = Math.floor(LIBRARY_TTL_MS / 1000)
+
+function redisKeyFor(cacheKey) {
+  return `lib:${cacheKey}`
+}
+
+async function getCachedLib(cacheKey) {
+  if (redis) {
+    try {
+      const raw = await redis.get(redisKeyFor(cacheKey))
+      return raw ? JSON.parse(raw) : null
+    } catch (err) {
+      console.warn('library: redis get failed, treating as cache miss:', err.message)
+      return null
+    }
+  }
+  const entry = memCache.get(cacheKey)
+  return entry && Date.now() - entry.cachedAt < LIBRARY_TTL_MS ? entry.lib : null
+}
+
+async function setCachedLib(cacheKey, lib) {
+  if (redis) {
+    try {
+      await redis.set(redisKeyFor(cacheKey), JSON.stringify(lib), 'EX', LIBRARY_TTL_SECONDS)
+      return
+    } catch (err) {
+      console.warn('library: redis set failed:', err.message)
+      return
+    }
+  }
+  memCache.set(cacheKey, { lib, cachedAt: Date.now() })
+}
 
 async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
   const cacheKey = `${torboxKey}|${tmdbKey}|${rpdbKey || ''}`
 
-  const cached = cache.get(cacheKey)
-  if (!force && cached && Date.now() - cached.cachedAt < LIBRARY_TTL_MS) {
-    return cached.lib
+  if (!force) {
+    const cached = await getCachedLib(cacheKey)
+    if (cached) return cached
   }
 
   const run = buildLock.then(async () => {
-    const cachedAfterWait = cache.get(cacheKey)
-    if (!force && cachedAfterWait && Date.now() - cachedAfterWait.cachedAt < LIBRARY_TTL_MS) {
-      return cachedAfterWait.lib
+    if (!force) {
+      const cachedAfterWait = await getCachedLib(cacheKey)
+      if (cachedAfterWait) return cachedAfterWait
     }
     const lib = await buildLibrary(torboxKey, tmdbKey, rpdbKey)
-    cache.set(cacheKey, { lib, cachedAt: Date.now() })
+    await setCachedLib(cacheKey, lib)
     return lib
   })
   buildLock = run.catch(() => {})
   return run
 }
 
-function clearCache() {
-  cache.clear()
+async function clearCache() {
+  memCache.clear()
+  if (redis) {
+    try {
+      const keys = await redis.keys('lib:*')
+      if (keys.length) await redis.del(...keys)
+    } catch (err) {
+      console.warn('library: redis clearCache failed:', err.message)
+    }
+  }
 }
 
 module.exports = { getLibrary, buildLibrary, clearCache, posterUrlFor, mapLimit }

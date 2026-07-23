@@ -1,17 +1,8 @@
 const crypto = require('crypto')
-const Redis = require('ioredis')
+const redis = require('./redisClient')
 const { CUSTOM_STREAM_TTL_MS, MAX_CUSTOM_STREAMS_PER_KEY } = require('./config')
 
 const TTL_SECONDS = Math.floor(CUSTOM_STREAM_TTL_MS / 1000)
-
-const redisUrl = process.env.REDIS_URL
-const redis = redisUrl ? new Redis(redisUrl) : null
-
-if (!redis) {
-  console.warn('customStreams: REDIS_URL not set — custom streams disabled')
-} else {
-  redis.on('error', (err) => console.warn('customStreams: redis connection error:', err.message))
-}
 
 function userKeyFor(torboxKey, tmdbKey, rpdbKey) {
   return `${torboxKey}|${tmdbKey}|${rpdbKey || ''}`

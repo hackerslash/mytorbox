@@ -68,8 +68,8 @@ app.post('/api/validate', async (req, res) => {
   res.json({ torbox, tmdb, rpdb })
 })
 
-app.post('/api/cache/clear', (req, res) => {
-  library.clearCache()
+app.post('/api/cache/clear', async (req, res) => {
+  await library.clearCache()
   tmdb.clearCache()
   res.json({ cleared: true })
 })
