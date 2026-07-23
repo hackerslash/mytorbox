@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MyTorbox — Configure</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="/logo.png?v=__LOGO_VERSION__">
+<link rel="apple-touch-icon" href="/logo.png?v=__LOGO_VERSION__">
+<style>
+  :root {
+    --bg-0: #05050a;
+    --bg-1: #0c0a16;
+    --card: #12101dcc;
+    --border: #ffffff17;
+    --border-strong: #ffffff2a;
+    --text: #f2f0f9;
+    --muted: #9a95b3;
+    --violet: #9b5cf6;
+    --violet-2: #7c3aed;
+    --blue: #4b39ef;
+    --danger-bg: #2a1730;
+    --danger-border: #6d3a8f66;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    color: var(--text);
+    background: radial-gradient(60% 50% at 50% -10%, #3b1f7a55, transparent 60%),
+                radial-gradient(50% 40% at 100% 100%, #2a1f8a3d, transparent 60%),
+                var(--bg-0);
+    background-attachment: fixed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    line-height: 1.5;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 36px 32px;
+    backdrop-filter: blur(20px);
+    box-shadow: 0 30px 80px -20px #00000090, inset 0 1px 0 #ffffff0f;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 6px;
+  }
+
+  .brand img {
+    width: 48px;
+    height: 48px;
+    filter: drop-shadow(0 4px 16px #7c3aed66);
+  }
+
+  .brand h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+
+  p.sub {
+    color: var(--muted);
+    font-size: 0.92rem;
+    margin: 14px 0 28px;
+  }
+
+  .field { margin-bottom: 18px; }
+
+  label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+
+  label .optional {
+    text-transform: none;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: #6f6a87;
+  }
+
+  label a {
+    text-transform: none;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--violet);
+    text-decoration: none;
+  }
+
+  label a:hover { text-decoration: underline; }
+
+  .input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .input-wrap svg.icon-key {
+    position: absolute;
+    left: 14px;
+    width: 16px;
+    height: 16px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+
+  input[type="password"], input[type="text"] {
+    width: 100%;
+    padding: 12px 44px 12px 40px;
+    font-size: 0.95rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #ffffff08;
+    color: var(--text);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  input::placeholder { color: #6f6a87; }
+
+  input[type="password"]:focus, input[type="text"]:focus {
+    outline: none;
+    border-color: var(--violet-2);
+    box-shadow: 0 0 0 3px #7c3aed33;
+  }
+
+  .toggle-visibility {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 6px;
+    display: flex;
+    border-radius: 6px;
+  }
+
+  .toggle-visibility:hover { color: var(--text); background: #ffffff10; }
+
+  input.checking { border-color: #ffffff30; }
+  input.valid { border-color: #4ade8066; }
+  input.invalid { border-color: #f8717166; }
+
+  .field-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.76rem;
+    margin-top: 7px;
+    min-height: 15px;
+    color: var(--muted);
+  }
+
+  .field-status svg { width: 13px; height: 13px; flex-shrink: 0; }
+  .field-status.valid { color: #4ade80; }
+  .field-status.invalid { color: #f87171; }
+
+  .spinner {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #ffffff2a;
+    border-top-color: var(--violet);
+    animation: spin 0.6s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  button.primary {
+    width: 100%;
+    margin-top: 10px;
+    padding: 13px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 10px;
+    border: none;
+    color: white;
+    cursor: pointer;
+    background: linear-gradient(135deg, var(--violet), var(--blue));
+    box-shadow: 0 8px 24px -8px #7c3aedaa;
+    transition: transform 0.12s, box-shadow 0.12s;
+  }
+
+  button.primary:hover { transform: translateY(-1px); box-shadow: 0 10px 28px -8px #7c3aedcc; }
+  button.primary:active { transform: translateY(0); }
+  button.primary:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  #result {
+    display: none;
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .row { display: flex; gap: 8px; }
+
+  #result-url {
+    flex: 1;
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.78rem;
+    padding: 10px 12px;
+  }
+
+  .icon-btn {
+    flex-shrink: 0;
+    width: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #ffffff08;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .icon-btn:hover { background: #ffffff14; color: var(--text); }
+  .icon-btn.copied { color: #4ade80; border-color: #4ade8055; }
+
+  .links { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+  a.btn, button.btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: #ffffff0d;
+    border: 1px solid var(--border);
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  a.btn:hover, button.btn:hover { background: #ffffff1a; border-color: var(--border-strong); }
+  a.btn svg, button.btn svg { width: 15px; height: 15px; }
+  button.btn.copied { color: #4ade80; border-color: #4ade8055; }
+
+  p.hint {
+    margin: 10px 0 0;
+    font-size: 0.76rem;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+
+  p.hint strong { color: var(--text); font-weight: 600; }
+
+  .warning {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    font-size: 0.8rem;
+    color: #d8c3f0;
+  }
+
+  .warning svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; color: #c084fc; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <img src="/logo.png?v=__LOGO_VERSION__" alt="MyTorbox logo">
+      <h1>MyTorbox</h1>
+    </div>
+    <p class="sub">Connect your TorBox account to generate a personal Stremio install link. Nothing is stored on this server — your keys are encoded into the addon URL itself.</p>
+
+    <div class="field">
+      <label for="torbox">TorBox API Key</label>
+      <div class="input-wrap">
+        <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        <input type="password" id="torbox" placeholder="8976-5a24-4230-...">
+        <button type="button" class="toggle-visibility" data-target="torbox" aria-label="Show key">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <div class="field-status" id="torbox-status"></div>
+    </div>
+
+    <div class="field">
+      <label for="tmdb">TMDB API Key</label>
+      <div class="input-wrap">
+        <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        <input type="password" id="tmdb" placeholder="e6fbedc39581f5...">
+        <button type="button" class="toggle-visibility" data-target="tmdb" aria-label="Show key">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <div class="field-status" id="tmdb-status"></div>
+    </div>
+
+    <div class="field">
+      <label for="rpdb">RPDB API Key <span><span class="optional">optional</span> · <a href="https://ratingposterdb.com/api-key/" target="_blank" rel="noopener">get a key</a></span></label>
+      <div class="input-wrap">
+        <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        <input type="password" id="rpdb" placeholder="t0-free-rpdb key for rated posters">
+        <button type="button" class="toggle-visibility" data-target="rpdb" aria-label="Show key">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <div class="field-status" id="rpdb-status"></div>
+    </div>
+
+    <button class="primary" id="generate-btn" onclick="onGenerateClick()">Generate Install Link</button>
+
+    <div id="result">
+      <label>Manifest URL</label>
+      <div class="row">
+        <input type="text" id="result-url" readonly>
+        <button class="icon-btn" id="copy-btn" onclick="copyUrl()" aria-label="Copy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+      <div class="links">
+        <a class="btn" id="stremio-link" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l14 0M13 6l6 6-6 6"/></svg>
+          Install in Stremio
+        </a>
+        <button class="btn" id="nuvio-btn" type="button" onclick="copyForNuvio()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Install in Nuvio
+        </button>
+      </div>
+      <p class="hint" id="nuvio-hint">Nuvio has no direct install link — tap "Install in Nuvio" to copy the URL, then in the app go to <strong>Settings → Addons → Add Addon</strong> and paste it.</p>
+      <div class="warning">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+        <span>Anyone with this URL can access your TorBox library — treat it like a password.</span>
+      </div>
+    </div>
+  </div>
+
+<script>
+document.querySelectorAll('.toggle-visibility').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.target);
+    input.type = input.type === 'password' ? 'text' : 'password';
+  });
+});
+
+const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+const ICON_CROSS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+
+function setFieldStatus(field, state, text) {
+  const el = document.getElementById(`${field}-status`);
+  const input = document.getElementById(field);
+  el.classList.remove('valid', 'invalid');
+  input.classList.remove('checking', 'valid', 'invalid');
+
+  if (state === 'idle') {
+    el.innerHTML = '';
+    return;
+  }
+  if (state === 'checking') {
+    input.classList.add('checking');
+    el.innerHTML = `<span class="spinner"></span><span>${text || 'Checking...'}</span>`;
+    return;
+  }
+  el.classList.add(state);
+  input.classList.add(state);
+  el.innerHTML = `${state === 'valid' ? ICON_CHECK : ICON_CROSS}<span>${text}</span>`;
+}
+
+async function onGenerateClick() {
+  const torbox = document.getElementById('torbox').value.trim();
+  const tmdb = document.getElementById('tmdb').value.trim();
+  const rpdb = document.getElementById('rpdb').value.trim();
+
+  if (!torbox || !tmdb) {
+    alert('TorBox and TMDB keys are required.');
+    return;
+  }
+
+  document.getElementById('result').style.display = 'none';
+  setFieldStatus('torbox', 'checking');
+  setFieldStatus('tmdb', 'checking');
+  if (rpdb) setFieldStatus('rpdb', 'checking'); else setFieldStatus('rpdb', 'idle');
+
+  const btn = document.getElementById('generate-btn');
+  btn.disabled = true;
+  btn.textContent = 'Validating keys...';
+
+  try {
+    const res = await fetch('/api/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Validation request failed (HTTP ${res.status})`);
+    }
+
+    const result = await res.json();
+
+    setFieldStatus('torbox', result.torbox.valid ? 'valid' : 'invalid', result.torbox.detail);
+    setFieldStatus('tmdb', result.tmdb.valid ? 'valid' : 'invalid', result.tmdb.detail);
+    if (result.rpdb) {
+      setFieldStatus('rpdb', result.rpdb.valid ? 'valid' : 'invalid', result.rpdb.detail);
+    }
+
+    const allValid = result.torbox.valid && result.tmdb.valid && (!result.rpdb || result.rpdb.valid);
+    if (allValid) {
+      buildAndShowLink(torbox, tmdb, rpdb);
+    }
+  } catch (err) {
+    setFieldStatus('torbox', 'idle');
+    setFieldStatus('tmdb', 'idle');
+    setFieldStatus('rpdb', 'idle');
+    alert(`Could not validate keys: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Install Link';
+  }
+}
+
+function buildAndShowLink(torbox, tmdb, rpdb) {
+  const payload = { torbox_key: torbox, tmdb_key: tmdb };
+  if (rpdb) payload.rpdb_key = rpdb;
+  // encoding matches stremio-addon-sdk's own config convention (encodeURIComponent(JSON) as the URL segment)
+  const config = encodeURIComponent(JSON.stringify(payload));
+  const manifestUrl = `${location.origin}/${config}/manifest.json`;
+
+  document.getElementById('result-url').value = manifestUrl;
+  document.getElementById('stremio-link').href = `stremio://${location.host}/${config}/manifest.json`;
+  document.getElementById('result').style.display = 'block';
+}
+
+function copyForNuvio() {
+  const url = document.getElementById('result-url').value;
+  navigator.clipboard.writeText(url);
+  const btn = document.getElementById('nuvio-btn');
+  const original = btn.innerHTML;
+  btn.classList.add('copied');
+  btn.innerHTML = `${ICON_CHECK}Copied — paste in Nuvio`;
+  setTimeout(() => {
+    btn.classList.remove('copied');
+    btn.innerHTML = original;
+  }, 2000);
+}
+
+function copyUrl() {
+  const el = document.getElementById('result-url');
+  el.select();
+  navigator.clipboard.writeText(el.value);
+  const btn = document.getElementById('copy-btn');
+  btn.classList.add('copied');
+  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M20 6L9 17l-5-5"/></svg>';
+  setTimeout(() => {
+    btn.classList.remove('copied');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  }, 1500);
+}
+</script>
+</body>
+</html>

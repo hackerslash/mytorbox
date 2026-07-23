@@ -1,0 +1,21 @@
+{
+  "name": "mytorbox",
+  "version": "1.0.0",
+  "description": "Stremio addon for browsing your TorBox library, built on stremio-addon-sdk",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "parse-torrent-title": "^3.0.1",
+    "stremio-addon-sdk": "^1.6.10"
+  }
+}
