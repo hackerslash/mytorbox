@@ -14,6 +14,7 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500'
 const RPDB_BASE = 'https://api.ratingposterdb.com'
 
 const LIBRARY_TTL_MS = 15 * 60 * 1000
+const CATALOG_PAGE_SIZE = 100
 const VIDEO_EXTENSIONS = new Set(['.mkv', '.mp4', '.avi', '.mov', '.m4v', '.webm', '.ts', '.flv'])
 const MIN_FILE_SIZE_BYTES = 500 * 1024 * 1024
 
@@ -48,6 +49,7 @@ module.exports = {
   TMDB_IMAGE_BASE,
   RPDB_BASE,
   LIBRARY_TTL_MS,
+  CATALOG_PAGE_SIZE,
   VIDEO_EXTENSIONS,
   MIN_FILE_SIZE_BYTES,
   CUSTOM_STREAM_DEFAULT_TTL_MS,

@@ -192,6 +192,18 @@ function stripJsonExt(s) {
   return s.endsWith('.json') ? s.slice(0, -5) : s
 }
 
+// Stremio encodes catalog extras as a path segment, e.g. /catalog/movie/id/skip=100.json
+function parseExtra(raw) {
+  const out = {}
+  if (!raw) return out
+  for (const pair of raw.split('&')) {
+    const idx = pair.indexOf('=')
+    if (idx === -1) continue
+    out[decodeURIComponent(pair.slice(0, idx))] = decodeURIComponent(pair.slice(idx + 1))
+  }
+  return out
+}
+
 // Only gates the no-:config fallback to DEFAULT_* env keys — a :config URL already carries its
 // own credentials. Off by default (preserves existing behavior); set ADDON_ACCESS_TOKEN to stop
 // anyone with the bare addon URL from browsing/streaming through your own TorBox account.
@@ -220,9 +232,16 @@ async function catalogHandler(req, res) {
     return
   }
   const type = req.params.type
-  const id = stripJsonExt(req.params.idWithExt)
+  let id, extra
+  if (req.params.extraWithExt !== undefined) {
+    id = req.params.id
+    extra = parseExtra(stripJsonExt(req.params.extraWithExt))
+  } else {
+    id = stripJsonExt(req.params.idWithExt)
+    extra = {}
+  }
   try {
-    const result = await addon.getCatalog({ type, id, config: cfg })
+    const result = await addon.getCatalog({ type, id, config: cfg, extra })
     res.type('application/json').send(JSON.stringify(result))
   } catch (err) {
     console.error('catalog handler error:', err)
@@ -274,6 +293,9 @@ async function streamHandler(req, res) {
 
 app.get('/catalog/:type/:idWithExt', catalogHandler)
 app.get('/:config/catalog/:type/:idWithExt', catalogHandler)
+
+app.get('/catalog/:type/:id/:extraWithExt', catalogHandler)
+app.get('/:config/catalog/:type/:id/:extraWithExt', catalogHandler)
 
 app.get('/meta/:type/:idWithExt', metaHandler)
 app.get('/:config/meta/:type/:idWithExt', metaHandler)

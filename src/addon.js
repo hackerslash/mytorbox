@@ -20,10 +20,10 @@ const manifest = {
   ],
   types: ['movie', 'series'],
   catalogs: [
-    { type: 'movie', id: 'torbox-movies', name: 'MyTorbox Movies' },
-    { type: 'series', id: 'torbox-series', name: 'MyTorbox Series' },
-    { type: 'movie', id: CUSTOM_MOVIES_CATALOG_ID, name: 'Custom Streams' },
-    { type: 'series', id: CUSTOM_SERIES_CATALOG_ID, name: 'Custom Streams' },
+    { type: 'movie', id: 'torbox-movies', name: 'MyTorbox Movies', extra: [{ name: 'skip' }] },
+    { type: 'series', id: 'torbox-series', name: 'MyTorbox Series', extra: [{ name: 'skip' }] },
+    { type: 'movie', id: CUSTOM_MOVIES_CATALOG_ID, name: 'Custom Streams', extra: [{ name: 'skip' }] },
+    { type: 'series', id: CUSTOM_SERIES_CATALOG_ID, name: 'Custom Streams', extra: [{ name: 'skip' }] },
   ],
   idPrefixes: ['tb:'],
   config: [
@@ -51,20 +51,26 @@ function resolveKeys(cfg) {
   return null
 }
 
-async function getCatalog({ type, id, config: cfg }) {
+function paginate(metas, extra) {
+  const skip = Number.parseInt(extra && extra.skip, 10)
+  const start = Number.isFinite(skip) && skip > 0 ? skip : 0
+  return metas.slice(start, start + config.CATALOG_PAGE_SIZE)
+}
+
+async function getCatalog({ type, id, config: cfg, extra }) {
   const keys = resolveKeys(cfg)
   if (!keys) return { metas: [] }
 
   if (id === CUSTOM_MOVIES_CATALOG_ID || id === CUSTOM_SERIES_CATALOG_ID) {
     const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
-    if (type === 'movie' && id === CUSTOM_MOVIES_CATALOG_ID) return { metas: custom.movies }
-    if (type === 'series' && id === CUSTOM_SERIES_CATALOG_ID) return { metas: custom.series }
+    if (type === 'movie' && id === CUSTOM_MOVIES_CATALOG_ID) return { metas: paginate(custom.movies, extra) }
+    if (type === 'series' && id === CUSTOM_SERIES_CATALOG_ID) return { metas: paginate(custom.series, extra) }
     return { metas: [] }
   }
 
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
-  if (type === 'movie' && id === 'torbox-movies') return { metas: lib.movies }
-  if (type === 'series' && id === 'torbox-series') return { metas: lib.series }
+  if (type === 'movie' && id === 'torbox-movies') return { metas: paginate(lib.movies, extra) }
+  if (type === 'series' && id === 'torbox-series') return { metas: paginate(lib.series, extra) }
   return { metas: [] }
 }
 
