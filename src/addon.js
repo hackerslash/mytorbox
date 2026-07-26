@@ -7,9 +7,19 @@ const HAS_DEFAULTS = Boolean(config.DEFAULT_TORBOX_API_KEY && config.DEFAULT_TMD
 const CUSTOM_MOVIES_CATALOG_ID = 'torbox-custom-movies'
 const CUSTOM_SERIES_CATALOG_ID = 'torbox-custom-series'
 
+function catalog(type, id, name) {
+  return {
+    type,
+    id,
+    name,
+    extra: [{ name: 'search' }, { name: 'skip' }],
+    extraSupported: ['search', 'skip'],
+  }
+}
+
 const manifest = {
   id: 'addon.mytorbox',
-  version: '1.0.0',
+  version: '1.1.0',
   name: 'MyTorbox',
   description: 'Browse your TorBox torrents and web downloads as a Stremio catalog with TMDB posters',
   logo: config.BASE_URL ? `${config.BASE_URL}/logo.png` : '/logo.png',
@@ -20,10 +30,10 @@ const manifest = {
   ],
   types: ['movie', 'series'],
   catalogs: [
-    { type: 'movie', id: 'torbox-movies', name: 'MyTorbox Movies', extra: [{ name: 'skip' }] },
-    { type: 'series', id: 'torbox-series', name: 'MyTorbox Series', extra: [{ name: 'skip' }] },
-    { type: 'movie', id: CUSTOM_MOVIES_CATALOG_ID, name: 'Custom Streams', extra: [{ name: 'skip' }] },
-    { type: 'series', id: CUSTOM_SERIES_CATALOG_ID, name: 'Custom Streams', extra: [{ name: 'skip' }] },
+    catalog('movie', 'torbox-movies', 'MyTorbox Movies'),
+    catalog('series', 'torbox-series', 'MyTorbox Series'),
+    catalog('movie', CUSTOM_MOVIES_CATALOG_ID, 'Custom Streams'),
+    catalog('series', CUSTOM_SERIES_CATALOG_ID, 'Custom Streams'),
   ],
   idPrefixes: ['tb:'],
   config: [
@@ -57,20 +67,47 @@ function paginate(metas, extra) {
   return metas.slice(start, start + config.CATALOG_PAGE_SIZE)
 }
 
+function normalizeForSearch(str) {
+  return String(str == null ? '' : str)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function searchTokens(extra) {
+  if (!extra || typeof extra.search !== 'string') return null
+  return normalizeForSearch(extra.search).split(' ').filter(Boolean)
+}
+
+function matchesTokens(meta, tokens) {
+  const haystack = normalizeForSearch(`${meta.name || ''} ${meta.releaseInfo || ''}`)
+  const compact = haystack.replace(/ /g, '')
+  return tokens.every((t) => haystack.includes(t) || compact.includes(t))
+}
+
+function selectMetas(metas, extra) {
+  const tokens = searchTokens(extra)
+  if (!tokens) return paginate(metas, extra)
+  if (!tokens.length) return []
+  return paginate(metas.filter((m) => matchesTokens(m, tokens)), extra)
+}
+
 async function getCatalog({ type, id, config: cfg, extra }) {
   const keys = resolveKeys(cfg)
   if (!keys) return { metas: [] }
 
   if (id === CUSTOM_MOVIES_CATALOG_ID || id === CUSTOM_SERIES_CATALOG_ID) {
     const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
-    if (type === 'movie' && id === CUSTOM_MOVIES_CATALOG_ID) return { metas: paginate(custom.movies, extra) }
-    if (type === 'series' && id === CUSTOM_SERIES_CATALOG_ID) return { metas: paginate(custom.series, extra) }
+    if (type === 'movie' && id === CUSTOM_MOVIES_CATALOG_ID) return { metas: selectMetas(custom.movies, extra) }
+    if (type === 'series' && id === CUSTOM_SERIES_CATALOG_ID) return { metas: selectMetas(custom.series, extra) }
     return { metas: [] }
   }
 
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
-  if (type === 'movie' && id === 'torbox-movies') return { metas: paginate(lib.movies, extra) }
-  if (type === 'series' && id === 'torbox-series') return { metas: paginate(lib.series, extra) }
+  if (type === 'movie' && id === 'torbox-movies') return { metas: selectMetas(lib.movies, extra) }
+  if (type === 'series' && id === 'torbox-series') return { metas: selectMetas(lib.series, extra) }
   return { metas: [] }
 }
 

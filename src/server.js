@@ -360,6 +360,10 @@ async function catalogHandler(req, res) {
   try {
     const result = await addon.getCatalog({ type, id, config: cfg, extra })
     stats.track(`catalog:${knownCatalogId(id)}`)
+    if (extra.search !== undefined) {
+      stats.track('catalog:search')
+      if (!result.metas.length) stats.track('catalog:search_empty')
+    }
     if (!result.metas.length) stats.track('catalog:empty')
     res.type('application/json').send(JSON.stringify(result))
   } catch (err) {
