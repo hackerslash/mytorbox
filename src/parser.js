@@ -8,21 +8,19 @@ function slugify(text) {
   return slug || 'unknown'
 }
 
-// Piracy release groups (TamilMV, TamilBlasters, MovieRulz, TamilRockers, ...) prepend their
-// site domain as a fake title, e.g. "www.1TamilMV.wtf - Real Movie Name (2024)...". guessit has
-// no way to know this isn't the title, so strip it before parsing.
 const SITE_PREFIX_RE = /^www\.\S+?\s*[-–—]\s*/i
+// Same trackers, bracketed form: "[ Torrent911.ke ] Real.Movie.2024...". The final label must be
+// letters only so this can't eat an episode tag like "[S0.E05]".
+const BRACKET_SITE_PREFIX_RE = /^\[\s*[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\s*\]\s*/i
 // RiffTrax comedy-commentary releases prepend their own brand before the real movie title.
 const RIFFTRAX_PREFIX_RE = /^rifftrax\s*[-–—:]\s*/i
-// Anime Music Videos have no real "movie" title (it's an artist/song, not a film) — skip entirely.
-const AMV_TAG_RE = /^\[amv\]/i
 
 function stripJunkPrefixes(name) {
   let cleaned = name
   let changed = true
   while (changed) {
     changed = false
-    for (const re of [SITE_PREFIX_RE, RIFFTRAX_PREFIX_RE]) {
+    for (const re of [SITE_PREFIX_RE, BRACKET_SITE_PREFIX_RE, RIFFTRAX_PREFIX_RE]) {
       if (re.test(cleaned)) {
         cleaned = cleaned.replace(re, '')
         changed = true
@@ -58,6 +56,26 @@ function dashEpisode(name, season) {
   return Number.isInteger(episode) ? episode : null
 }
 
+function stripTags(name) {
+  return name
+    .replace(/\.[a-z0-9]{2,4}$/i, '')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+}
+
+function looseEpisode(name) {
+  const stem = stripTags(name)
+  const explicit = /(?:^|[\s._-])e(?:p|pisode)?[\s._-]?(\d{1,4})(?:v\d+)?(?=$|[\s._)\]-])/i.exec(stem)
+  if (explicit) return Number.parseInt(explicit[1], 10)
+  const dashed = /[\s._][-–—][\s._]*(\d{1,3})(?:v\d+)?(?=$|[\s._])/.exec(stem)
+  return dashed ? Number.parseInt(dashed[1], 10) : null
+}
+
+function titleFromFilename(name) {
+  const cleaned = stripTags(name).replace(/[._]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return cleaned || name.replace(/\.[a-z0-9]{2,4}$/i, '').trim() || 'Unknown'
+}
+
 function makeGuessResolver(loaded) {
   const current = new Map()
   return {
@@ -83,7 +101,6 @@ function* parseWorkItems(source, entry, resolver = DIRECT_RESOLVER) {
   for (const f of entry.files || []) {
     const name = f.short_name || f.name || ''
     if (!isVideo(name)) continue
-    if (AMV_TAG_RE.test(name.trim())) continue
 
     const cleanedName = stripJunkPrefixes(name)
     const guess = resolver.resolve(cleanedName)
@@ -93,19 +110,21 @@ function* parseWorkItems(source, entry, resolver = DIRECT_RESOLVER) {
     let isEpisode = guess.type === 'episode'
     let season = isEpisode ? guess.season || 1 : null
     let episode = isEpisode ? guess.episode ?? guess.absolute_episode ?? null : null
-    if (episode == null && isEpisode) episode = dashEpisode(cleanedName, guess.season)
+    if (isEpisode && episode == null) episode = dashEpisode(cleanedName, guess.season)
+    if (isEpisode && episode == null) episode = looseEpisode(cleanedName)
 
-    // Season-pack files sometimes have no show name at all (e.g. "01. Episode Title.mkv") —
-    // the real title only lives on the parent torrent/webdl entry.
-    if (isEpisode && !title && entry.name) {
+    if (!title && entry.name) {
       if (entryGuess === undefined) entryGuess = resolver.resolve(stripJunkPrefixes(entry.name))
       title = fixTruncatedNumericTitle(entry.name, titleToString(entryGuess.title))
       year = year || entryGuess.year || null
-      season = season || entryGuess.season || 1
+      if (isEpisode) season = season || entryGuess.season || 1
     }
 
-    if (!title) continue
-    if (isEpisode && episode == null) continue
+    if (!title) title = titleFromFilename(name)
+
+    // The only remaining reason to skip a video file: samples, trailers and disc menus, which are
+    // small and would otherwise mint junk rows. A failure to parse never costs a file — an episode
+    // with no number reaches season 0 via buildLibrary, and a nameless file borrows its filename.
     if (!isEpisode && (f.size || 0) < MIN_FILE_SIZE_BYTES) continue
 
     yield {

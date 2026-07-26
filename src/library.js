@@ -91,6 +91,7 @@ function mergeMovieGroups(dst, src) {
 function mergeSeriesGroups(dst, src) {
   dst.year = dst.year || src.year
   dst.createdAt = Math.max(dst.createdAt, src.createdAt)
+  dst.unnumbered.push(...src.unnumbered)
   for (const [epKey, items] of src.episodes) {
     if (!dst.episodes.has(epKey)) dst.episodes.set(epKey, [])
     dst.episodes.get(epKey).push(...items)
@@ -145,11 +146,15 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey, entriesBySource = null,
     if (w.isEpisode) {
       const key = slugify(w.title)
       if (!seriesGroups.has(key)) {
-        seriesGroups.set(key, { title: w.title, year: null, createdAt: 0, episodes: new Map() })
+        seriesGroups.set(key, { title: w.title, year: null, createdAt: 0, episodes: new Map(), unnumbered: [] })
       }
       const g = seriesGroups.get(key)
       g.year = g.year || w.year
       g.createdAt = Math.max(g.createdAt, w.createdAt)
+      if (w.episode == null) {
+        g.unnumbered.push(w)
+        continue
+      }
       const epKey = `${w.season}:${w.episode}`
       if (!g.episodes.has(epKey)) g.episodes.set(epKey, [])
       g.episodes.get(epKey).push(w)
@@ -216,6 +221,24 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey, entriesBySource = null,
     const logo = tmdb.logoUrl(seriesImages[i], tmdbRes && tmdbRes.original_language)
     if (logo) preview.logo = logo
 
+    // Files we couldn't number (creditless openings, digests, one-off specials) are parked in
+    // season 0 rather than discarded, after any real season-0 specials, and keep their filename
+    // as the video title so they're recognisable in the episode list.
+    const specialTitles = new Map()
+    if (g.unnumbered.length) {
+      let slot = 0
+      for (const epKey of g.episodes.keys()) {
+        const [s, e] = epKey.split(':').map(Number)
+        if (s === 0) slot = Math.max(slot, e)
+      }
+      const ordered = [...g.unnumbered].sort((a, b) => a.filename.localeCompare(b.filename))
+      ordered.forEach((w, i) => {
+        const epKey = `0:${slot + i + 1}`
+        g.episodes.set(epKey, [w])
+        specialTitles.set(epKey, w.filename.replace(/\.[a-z0-9]{2,4}$/i, ''))
+      })
+    }
+
     const videos = []
     const epKeysSorted = [...g.episodes.keys()].sort((a, b) => {
       const [aSeason, aEpisode] = a.split(':').map(Number)
@@ -228,7 +251,7 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey, entriesBySource = null,
       const vid = `${sid}:${season}:${episode}`
       videos.push({
         id: vid,
-        title: `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`,
+        title: specialTitles.get(epKey) || `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`,
         season,
         episode,
       })
