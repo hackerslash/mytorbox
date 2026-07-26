@@ -56,6 +56,12 @@ function providedSecret(req) {
   const auth = req.get('authorization') || ''
   return auth.startsWith('Bearer ') ? auth.slice(7) : null
 }
+function kind(name) {
+  return (req, res, next) => {
+    req.statsKind = name
+    next()
+  }
+}
 
 function requireAdmin(req, res, next) {
   if (!config.ADMIN_SECRET) {
@@ -73,9 +79,8 @@ function requireAdmin(req, res, next) {
 const app = express()
 app.set('trust proxy', true) // needed for correct req.ip behind a reverse proxy/load balancer, used by rate limiting
 app.use(cors())
-app.use(express.json())
 
-const UNTRACKED_PATHS = /^\/(logo\.png|stats|api\/stats)$/
+const UNTRACKED_PATHS = /^\/(logo\.png|favicon\.ico|robots\.txt|stats|api\/stats)$/
 
 app.use((req, res, next) => {
   if (UNTRACKED_PATHS.test(req.path)) {
@@ -92,6 +97,8 @@ app.use((req, res, next) => {
   })
   next()
 })
+
+app.use(express.json())
 
 app.get('/', (req, res) => {
   req.statsKind = 'configure'
@@ -113,8 +120,7 @@ app.get('/:config/configure', (req, res) => {
   res.type('html').send(configurePage(cfg.torbox_key || '', cfg.tmdb_key || '', cfg.rpdb_key || ''))
 })
 
-app.post('/api/validate', rateLimit('validate', RATE_LIMITS.validate), async (req, res) => {
-  req.statsKind = 'validate'
+app.post('/api/validate', kind('validate'), rateLimit('validate', RATE_LIMITS.validate), async (req, res) => {
   const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey } = req.body || {}
   const [torbox, tmdb, rpdb] = await Promise.all([
     validators.checkTorbox(torboxKey),
@@ -128,8 +134,7 @@ app.post('/api/validate', rateLimit('validate', RATE_LIMITS.validate), async (re
   res.json({ torbox, tmdb, rpdb })
 })
 
-app.post('/api/cache/clear', rateLimit('cacheClear', RATE_LIMITS.cacheClear), requireAdmin, async (req, res) => {
-  req.statsKind = 'admin'
+app.post('/api/cache/clear', kind('admin'), rateLimit('cacheClear', RATE_LIMITS.cacheClear), requireAdmin, async (req, res) => {
   await library.clearCache()
   tmdb.clearCache()
   stats.track('admin:cache_cleared')
@@ -181,8 +186,7 @@ async function enrichEntry(e, tmdbKey, rpdbKey) {
   return { ...toPublicEntry(e), name, poster }
 }
 
-app.post('/api/custom-streams/list', rateLimit('customStreamRead', RATE_LIMITS.customStreamRead), async (req, res) => {
-  req.statsKind = 'custom:list'
+app.post('/api/custom-streams/list', kind('custom:list'), rateLimit('customStreamRead', RATE_LIMITS.customStreamRead), async (req, res) => {
   const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey } = req.body || {}
   if (!torboxKey || !tmdbKey) {
     return res.status(400).json({ ok: false, error: 'torbox_key and tmdb_key are required' })
@@ -193,8 +197,7 @@ app.post('/api/custom-streams/list', rateLimit('customStreamRead', RATE_LIMITS.c
   res.json({ ok: true, entries: enriched })
 })
 
-app.post('/api/custom-streams/add', rateLimit('customStreamWrite', RATE_LIMITS.customStreamWrite), async (req, res) => {
-  req.statsKind = 'custom:add'
+app.post('/api/custom-streams/add', kind('custom:add'), rateLimit('customStreamWrite', RATE_LIMITS.customStreamWrite), async (req, res) => {
   const {
     torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey,
     type, imdb_id: imdbId, season, episode, stream_url: streamUrl, title, ttl_seconds: ttlSeconds,
@@ -250,8 +253,7 @@ app.post('/api/custom-streams/add', rateLimit('customStreamWrite', RATE_LIMITS.c
   res.json({ ok: true, entry: toPublicEntry(entry) })
 })
 
-app.post('/api/custom-streams/remove', rateLimit('customStreamRead', RATE_LIMITS.customStreamRead), async (req, res) => {
-  req.statsKind = 'custom:remove'
+app.post('/api/custom-streams/remove', kind('custom:remove'), rateLimit('customStreamRead', RATE_LIMITS.customStreamRead), async (req, res) => {
   const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey, id } = req.body || {}
   if (!torboxKey || !tmdbKey || !id) {
     return res.status(400).json({ ok: false, error: 'torbox_key, tmdb_key, and id are required' })
@@ -266,6 +268,17 @@ app.post('/api/custom-streams/remove', rateLimit('customStreamRead', RATE_LIMITS
 app.get('/logo.png', (req, res) => {
   res.set('Cache-Control', 'public, max-age=31536000, immutable')
   res.sendFile(LOGO_PATH)
+})
+app.get('/favicon.ico', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=86400')
+  res.type('image/png').sendFile(LOGO_PATH)
+})
+
+const ROBOTS_TXT = 'User-agent: *\nDisallow: /\n'
+
+app.get('/robots.txt', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=86400')
+  res.type('text/plain').send(ROBOTS_TXT)
 })
 
 
@@ -421,5 +434,24 @@ app.get('/:config/meta/:type/:idWithExt', metaHandler)
 
 app.get('/stream/:type/:idWithExt', streamHandler)
 app.get('/:config/stream/:type/:idWithExt', streamHandler)
+app.use((req, res) => {
+  req.statsKind = 'notfound'
+  res.status(404).json({ err: 'not found' })
+})
+
+app.use((err, req, res, next) => {
+  const status = err && (err.status || err.statusCode)
+  if (status >= 400 && status < 500) {
+    req.statsKind = req.statsKind || 'badrequest'
+    res.status(status).json({
+      ok: false,
+      error: err.type === 'entity.parse.failed' ? 'invalid JSON body' : 'bad request',
+    })
+    return
+  }
+  console.error('unhandled error:', err)
+  req.statsKind = req.statsKind || 'error'
+  res.status(500).json({ ok: false, error: 'internal error' })
+})
 
 module.exports = app
