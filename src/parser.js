@@ -50,6 +50,14 @@ function fixTruncatedNumericTitle(cleanedName, title) {
   }
   return title
 }
+function dashEpisode(name, season) {
+  if (!Number.isInteger(season)) return null
+  const m = new RegExp(`s0*${season}\\s*[-–—]\\s*(\\d{1,4})(?:v\\d+)?\\b`, 'i').exec(name)
+  if (!m) return null
+  const episode = Number.parseInt(m[1], 10)
+  return Number.isInteger(episode) ? episode : null
+}
+
 function makeGuessResolver(loaded) {
   const current = new Map()
   return {
@@ -85,6 +93,7 @@ function* parseWorkItems(source, entry, resolver = DIRECT_RESOLVER) {
     let isEpisode = guess.type === 'episode'
     let season = isEpisode ? guess.season || 1 : null
     let episode = isEpisode ? guess.episode ?? guess.absolute_episode ?? null : null
+    if (episode == null && isEpisode) episode = dashEpisode(cleanedName, guess.season)
 
     // Season-pack files sometimes have no show name at all (e.g. "01. Episode Title.mkv") —
     // the real title only lives on the parent torrent/webdl entry.
