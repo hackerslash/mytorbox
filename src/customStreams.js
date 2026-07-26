@@ -3,6 +3,7 @@ const redis = require('./redisClient')
 const stats = require('./stats')
 const { slugify } = require('./parser')
 const validators = require('./validators')
+const { encryptUrl, decryptUrl } = require('./urlCipher')
 const {
   CUSTOM_STREAM_DEFAULT_TTL_MS,
   CUSTOM_STREAM_MIN_TTL_MS,
@@ -17,8 +18,12 @@ function clampTtlMs(ttlMs) {
   return Math.min(Math.max(ttlMs, CUSTOM_STREAM_MIN_TTL_MS), CUSTOM_STREAM_MAX_TTL_MS)
 }
 
+function materialFor(torboxKey, tmdbKey, rpdbKey) {
+  return `${torboxKey}|${tmdbKey}|${rpdbKey || ''}`
+}
+
 function userKeyFor(torboxKey, tmdbKey, rpdbKey) {
-  return crypto.createHash('sha256').update(`${torboxKey}|${tmdbKey}|${rpdbKey || ''}`).digest('hex')
+  return crypto.createHash('sha256').update(materialFor(torboxKey, tmdbKey, rpdbKey)).digest('hex')
 }
 
 function entryKey(userKey, entryId) {
@@ -90,7 +95,7 @@ async function addCustomStream(torboxKey, tmdbKey, rpdbKey, entry) {
       groupKey: groupKeyFor(entry.imdbId, entry.title),
       season: entry.type === 'series' ? entry.season : null,
       episode: entry.type === 'series' ? entry.episode : null,
-      streamUrl: entry.streamUrl,
+      streamUrl: encryptUrl(entry.streamUrl, materialFor(torboxKey, tmdbKey, rpdbKey)),
       title: entry.title || null,
       createdAt: now,
       expiresAt,
@@ -104,7 +109,7 @@ async function addCustomStream(torboxKey, tmdbKey, rpdbKey, entry) {
     stats.track(`custom:added:${entry.type}`)
     if (!entry.imdbId) stats.track('custom:added:no_imdb')
 
-    return stored
+    return { ...stored, streamUrl: entry.streamUrl }
   } catch (err) {
     console.warn('customStreams: addCustomStream failed:', err.message)
     return null
@@ -126,6 +131,7 @@ async function listCustomStreams(torboxKey, tmdbKey, rpdbKey) {
     const keys = ids.map((id) => entryKey(uKey, id))
     const raw = await redis.mget(...keys)
 
+    const material = materialFor(torboxKey, tmdbKey, rpdbKey)
     const entries = []
     const staleIds = []
     raw.forEach((val, i) => {
@@ -133,7 +139,13 @@ async function listCustomStreams(torboxKey, tmdbKey, rpdbKey) {
         staleIds.push(ids[i])
         return
       }
-      entries.push(JSON.parse(val))
+      const entry = JSON.parse(val)
+      const streamUrl = decryptUrl(entry.streamUrl, material)
+      if (!streamUrl) {
+        stats.track('custom:undecryptable')
+        return
+      }
+      entries.push({ ...entry, streamUrl })
     })
 
     if (staleIds.length) await redis.zrem(idx, ...staleIds)
