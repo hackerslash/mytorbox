@@ -1,6 +1,6 @@
 const crypto = require('crypto')
 const zlib = require('zlib')
-const { SOURCES, fetchMylist, buildStreamUrl } = require('./torbox')
+const { SOURCES, fetchMylist, fetchNewest, buildStreamUrl } = require('./torbox')
 const { parseWorkItems, slugify, makeGuessResolver } = require('./parser')
 const tmdb = require('./tmdb')
 const rpdb = require('./rpdb')
@@ -8,6 +8,7 @@ const redis = require('./redisClient')
 const stats = require('./stats')
 const {
   LIBRARY_CHECK_INTERVAL_MS,
+  LIBRARY_PROBE_INTERVAL_MS,
   LIBRARY_HARD_TTL_MS,
   PARSE_CACHE_TTL_SECONDS,
   MAX_CACHE_VALUE_BYTES,
@@ -126,6 +127,30 @@ async function fetchEntriesBySource(torboxKey, bypassCache = false) {
     stats.track('torbox:items', bySource[source].length)
   }
   return bySource
+}
+
+function newestOf(items) {
+  let newest = null
+  for (const e of items || []) {
+    if (!newest || String(e.created_at) > String(newest.created_at)) newest = e
+  }
+  return newest
+}
+
+function tipOfEntry(source, entry) {
+  return entry ? `${source}:${entry.id}:${entry.created_at || ''}:${entry.updated_at || ''}` : `${source}:none`
+}
+
+function tipEntries(entriesBySource) {
+  return SOURCES.map((source) => tipOfEntry(source, newestOf(entriesBySource[source]))).join('|')
+}
+
+async function fetchTip(torboxKey) {
+  const parts = []
+  for (const source of SOURCES) {
+    parts.push(tipOfEntry(source, await fetchNewest(source, torboxKey)))
+  }
+  return parts.join('|')
 }
 
 function fingerprintEntries(entriesBySource) {
@@ -383,13 +408,36 @@ async function saveParseCache(cacheKey, map) {
   }
 }
 
+async function probeUnchanged(cacheKey, cached, torboxKey) {
+  if (!cached.tip) return false
+  try {
+    const tip = await fetchTip(torboxKey)
+    if (tip !== cached.tip) {
+      stats.track('lib:probe_changed')
+      return false
+    }
+    stats.track('lib:probe_unchanged')
+    await setCachedRecord(cacheKey, { ...cached, probedAt: Date.now() })
+    return true
+  } catch (err) {
+    stats.track('lib:probe_error')
+    console.warn('library: tip probe failed, falling back to cached library:', err.message)
+    await setCachedRecord(cacheKey, { ...cached, probedAt: Date.now() })
+    return true
+  }
+}
+
 async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
   const cacheKey = cacheKeyFor(torboxKey, tmdbKey, rpdbKey)
 
   const cached = await getCachedRecord(cacheKey)
   if (!force && cached && cached.lib && Date.now() - cached.validatedAt < LIBRARY_CHECK_INTERVAL_MS) {
-    stats.track('lib:hit')
-    return cached.lib
+    if (Date.now() - (cached.probedAt || cached.validatedAt) < LIBRARY_PROBE_INTERVAL_MS) {
+      stats.track('lib:hit')
+      return cached.lib
+    }
+    stats.track('lib:probe')
+    if (await probeUnchanged(cacheKey, cached, torboxKey)) return cached.lib
   }
 
   // Serialize concurrent (re)validations per user so a burst of requests triggers at
@@ -397,7 +445,7 @@ async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
   const prevLock = buildLocks.get(cacheKey) || Promise.resolve()
   const run = prevLock.then(async () => {
     const fresh = await getCachedRecord(cacheKey)
-    if (!force && fresh && fresh.lib && Date.now() - fresh.validatedAt < LIBRARY_CHECK_INTERVAL_MS) {
+    if (!force && fresh && fresh.lib && Date.now() - fresh.validatedAt < LIBRARY_PROBE_INTERVAL_MS) {
       stats.track('lib:hit_coalesced')
       return fresh.lib
     }
@@ -406,9 +454,11 @@ async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
     const entriesBySource = await fetchEntriesBySource(torboxKey, force)
     const fingerprint = fingerprintEntries(entriesBySource)
 
+    const tip = tipEntries(entriesBySource)
+
     if (!force && fresh && fresh.lib && fresh.fingerprint === fingerprint) {
       stats.track('lib:unchanged')
-      await setCachedRecord(cacheKey, { lib: fresh.lib, fingerprint, validatedAt: Date.now() })
+      await setCachedRecord(cacheKey, { lib: fresh.lib, fingerprint, tip, validatedAt: Date.now(), probedAt: Date.now() })
       return fresh.lib
     }
     const startedAt = Date.now()
@@ -417,7 +467,7 @@ async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
     stats.track('lib:rebuild')
     stats.trackDuration('lib:build', buildMs)
     stats.trackLibraryShape(cacheKey, lib, buildMs)
-    await setCachedRecord(cacheKey, { lib, fingerprint, validatedAt: Date.now() })
+    await setCachedRecord(cacheKey, { lib, fingerprint, tip, validatedAt: Date.now(), probedAt: Date.now() })
     return lib
   })
   const settled = run.then(() => {}, () => {})

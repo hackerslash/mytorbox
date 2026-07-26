@@ -23,6 +23,13 @@ async function fetchMylist(source, apiKey, { bypassCache = false } = {}) {
   return all
 }
 
+async function fetchNewest(source, apiKey) {
+  const url = `${TORBOX_BASE}/${source}/mylist?bypass_cache=false&limit=1&offset=0`
+  const data = await getJson(url, { headers: headers(apiKey) })
+  const items = (data && data.data) || []
+  return items.length ? items[0] : null
+}
+
 function isVideo(filename) {
   const idx = filename.lastIndexOf('.')
   if (idx === -1) return false
@@ -35,4 +42,4 @@ function buildStreamUrl(source, itemId, fileId, apiKey) {
   return `${TORBOX_BASE}/${source}/requestdl?token=${apiKey}&${idParam}=${itemId}&file_id=${fileId}&redirect=true`
 }
 
-module.exports = { SOURCES, fetchMylist, isVideo, buildStreamUrl }
+module.exports = { SOURCES, fetchMylist, fetchNewest, isVideo, buildStreamUrl }

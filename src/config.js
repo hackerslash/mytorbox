@@ -12,7 +12,8 @@ const TMDB_BASE = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500'
 const RPDB_BASE = 'https://api.ratingposterdb.com'
 
-const LIBRARY_CHECK_INTERVAL_MS = 15 * 60 * 1000
+const LIBRARY_CHECK_INTERVAL_MS = 60 * 60 * 1000
+const LIBRARY_PROBE_INTERVAL_MS = 2 * 60 * 1000
 // Hard expiry for a cached library — evicts inactive users; refreshed on every check.
 const LIBRARY_HARD_TTL_MS = 24 * 60 * 60 * 1000
 // guessit(filename) is deterministic and filenames are immutable, so parse results
@@ -78,6 +79,7 @@ module.exports = {
   TMDB_IMAGE_BASE,
   RPDB_BASE,
   LIBRARY_CHECK_INTERVAL_MS,
+  LIBRARY_PROBE_INTERVAL_MS,
   LIBRARY_HARD_TTL_MS,
   PARSE_CACHE_TTL_SECONDS,
   TMDB_CACHE_TTL_SECONDS,
