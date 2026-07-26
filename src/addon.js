@@ -1,5 +1,5 @@
 const config = require('./config')
-const { getLibrary, hydrateStreams } = require('./library')
+const { getLibrary, hydrateStreams, withRpdbPosters } = require('./library')
 const { buildCustomCatalog } = require('./customCatalog')
 
 const HAS_DEFAULTS = Boolean(config.DEFAULT_TORBOX_API_KEY && config.DEFAULT_TMDB_API_KEY)
@@ -118,8 +118,12 @@ async function getCatalog({ type, id, config: cfg, extra }) {
   }
 
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
-  if (type === 'movie' && id === 'torbox-movies') return { metas: selectMetas(lib.movies, extra) }
-  if (type === 'series' && id === 'torbox-series') return { metas: selectMetas(lib.series, extra) }
+  if (type === 'movie' && id === 'torbox-movies') {
+    return { metas: withRpdbPosters(selectMetas(lib.movies, extra), keys.rpdbKey) }
+  }
+  if (type === 'series' && id === 'torbox-series') {
+    return { metas: withRpdbPosters(selectMetas(lib.series, extra), keys.rpdbKey) }
+  }
   return { metas: [] }
 }
 
@@ -137,7 +141,7 @@ async function getMeta({ type, id, config: cfg }) {
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
   const item = lib.meta[id]
   if (!item || item.type !== type) return null
-  return { meta: item }
+  return { meta: withRpdbPosters([item], keys.rpdbKey)[0] }
 }
 
 async function getStream({ type, id, config: cfg }) {

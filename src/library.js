@@ -46,6 +46,18 @@ function posterUrlFor(tmdbRes, kind, rpdbKey) {
   return tmdb.posterUrl(tmdbRes)
 }
 
+const TMDB_ID_IN_ID_RE = /^tb:(?:movie|series):tmdb-(\d+)(?::|$)/
+
+function withRpdbPosters(items, rpdbKey) {
+  if (!rpdbKey) return items
+  return items.map((item) => {
+    const match = TMDB_ID_IN_ID_RE.exec(item.id || '')
+    if (!match) return item
+    const poster = rpdb.posterUrl(rpdbKey, match[1], item.type)
+    return poster ? { ...item, poster } : item
+  })
+}
+
 async function mapLimit(items, limit, fn) {
   const results = new Array(items.length)
   let next = 0
@@ -127,7 +139,7 @@ function fingerprintEntries(entriesBySource) {
   return `${parts.length}:${crypto.createHash('sha1').update(parts.join('|')).digest('hex')}`
 }
 
-async function buildLibrary(torboxKey, tmdbKey, rpdbKey, entriesBySource = null, cacheKey = null) {
+async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey = null) {
   const bySource = entriesBySource || (await fetchEntriesBySource(torboxKey))
 
   const resolver = makeGuessResolver(await loadParseCache(cacheKey))
@@ -198,7 +210,7 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey, entriesBySource = null,
       id: mid,
       type: 'movie',
       name: (tmdbRes && tmdbRes.title) || g.title,
-      poster: posterUrlFor(tmdbRes, 'movie', rpdbKey),
+      poster: tmdb.posterUrl(tmdbRes),
     }
     if (year) preview.releaseInfo = String(year)
     const logo = tmdb.logoUrl(movieImages[i], tmdbRes && tmdbRes.original_language)
@@ -215,7 +227,7 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey, entriesBySource = null,
       id: sid,
       type: 'series',
       name: (tmdbRes && tmdbRes.name) || g.title,
-      poster: posterUrlFor(tmdbRes, 'series', rpdbKey),
+      poster: tmdb.posterUrl(tmdbRes),
     }
     if (year) preview.releaseInfo = String(year)
     const logo = tmdb.logoUrl(seriesImages[i], tmdbRes && tmdbRes.original_language)
@@ -400,7 +412,7 @@ async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
       return fresh.lib
     }
     const startedAt = Date.now()
-    const lib = await buildLibrary(torboxKey, tmdbKey, rpdbKey, entriesBySource, cacheKey)
+    const lib = await buildLibrary(torboxKey, tmdbKey, entriesBySource, cacheKey)
     const buildMs = Date.now() - startedAt
     stats.track('lib:rebuild')
     stats.trackDuration('lib:build', buildMs)
@@ -434,4 +446,4 @@ async function clearCache() {
   }
 }
 
-module.exports = { getLibrary, buildLibrary, clearCache, posterUrlFor, mapLimit, hydrateStreams }
+module.exports = { getLibrary, buildLibrary, clearCache, posterUrlFor, withRpdbPosters, mapLimit, hydrateStreams }
