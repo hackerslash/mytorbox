@@ -309,6 +309,62 @@
 
   .toggle-visibility:hover { color: var(--text-0); background: var(--bg-raised); }
 
+  .option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-3);
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-2);
+    cursor: pointer;
+    font-weight: 400;
+    transition: border-color 0.15s;
+  }
+
+  .option:hover { border-color: var(--border-strong); }
+
+  .option input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin: 1px 0 0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-raised);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .option input[type="checkbox"]:checked {
+    background: var(--violet);
+    border-color: var(--violet);
+  }
+
+  .option input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 4.5px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid var(--bg-0);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  .option input[type="checkbox"]:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px oklch(66% 0.19 var(--hue) / 0.22);
+  }
+
+  .option-text { display: flex; flex-direction: column; gap: 3px; }
+  .option-text strong { font-size: var(--fs-sm); font-weight: 600; color: var(--text-0); }
+  .option-text span { font-size: var(--fs-xs); color: var(--text-2); line-height: 1.5; }
+
   input.checking { border-color: var(--border-strong); }
   input.valid { border-color: oklch(76% 0.16 152 / 0.55); }
   input.invalid { border-color: oklch(69% 0.19 24 / 0.55); }
@@ -618,8 +674,9 @@
         <a href="#sec-identity"><span class="tag c-violet">01</span>Identity</a>
         <a href="#sec-metadata"><span class="tag c-blue">02</span>Metadata</a>
         <a href="#sec-posters"><span class="tag">03</span>Posters</a>
-        <a href="#sec-output"><span class="tag c-green">04</span>Output</a>
-        <a href="#sec-custom"><span class="tag c-amber">05</span>Custom Streams</a>
+        <a href="#sec-options"><span class="tag">04</span>Options</a>
+        <a href="#sec-output"><span class="tag c-green">05</span>Output</a>
+        <a href="#sec-custom"><span class="tag c-amber">06</span>Custom Streams</a>
       </nav>
       <p class="rail-foot">Stremio addon for browsing a TorBox library. No accounts, no server-side tracking.</p>
     </aside>
@@ -688,6 +745,25 @@
         <div class="field-status" id="rpdb-status"></div>
       </section>
 
+      <div class="hr"></div>
+
+      <section class="section" id="sec-options">
+        <div class="section-head">
+          <span class="tag">04</span>
+          <div>
+            <label>Options <span class="badge optional">Optional</span></label>
+            <p class="section-hint">Tweaks how the catalogues behave in Stremio. Changing these regenerates the install link.</p>
+          </div>
+        </div>
+        <label class="option" for="no-search">
+          <input type="checkbox" id="no-search">
+          <span class="option-text">
+            <strong>Exclude from Stremio search</strong>
+            <span>By default your library also turns up when you search in Stremio. Tick this to keep it browse-only — the catalogue rows stay exactly as they are.</span>
+          </span>
+        </label>
+      </section>
+
       <button class="primary" id="generate-btn" onclick="onGenerateClick()">
         Generate Install Link
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -697,7 +773,7 @@
 
       <section class="section" id="sec-output">
         <div class="section-head">
-          <span class="tag c-green">04</span>
+          <span class="tag c-green">05</span>
           <div>
             <label>Output</label>
             <p class="section-hint">Your manifest URL and install links appear here once the keys above validate.</p>
@@ -737,7 +813,7 @@
 
       <section class="section" id="sec-custom">
         <div class="section-head">
-          <span class="tag c-amber">05</span>
+          <span class="tag c-amber">06</span>
           <div>
             <label>Custom Streams</label>
             <p class="section-hint">Add your own stream URL — with an IMDb id it gets proper posters/metadata, without one it still shows up under its title alone. Appears as a separate catalogue in Stremio and deletes itself when its TTL runs out.</p>
@@ -789,6 +865,12 @@ document.querySelectorAll('.toggle-visibility').forEach(btn => {
     const input = document.getElementById(btn.dataset.target);
     input.type = input.type === 'password' ? 'text' : 'password';
   });
+});
+
+document.getElementById('no-search').addEventListener('change', () => {
+  if (document.getElementById('result').style.display !== 'block') return;
+  const { torbox, tmdb, rpdb } = getConfigValues();
+  buildAndShowLink(torbox, tmdb, rpdb);
 });
 
 const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
@@ -880,6 +962,7 @@ function toBase64Url(obj) {
 function buildAndShowLink(torbox, tmdb, rpdb) {
   const payload = { torbox_key: torbox, tmdb_key: tmdb };
   if (rpdb) payload.rpdb_key = rpdb;
+  if (document.getElementById('no-search').checked) payload.no_search = true;
   const config = toBase64Url(payload);
   const manifestUrl = `${location.origin}/${config}/manifest.json`;
 

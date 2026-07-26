@@ -26,11 +26,12 @@ function escapeHtml(str) {
   return str.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
 
-function configurePage(torboxKey = '', tmdbKey = '', rpdbKey = '') {
+function configurePage(torboxKey = '', tmdbKey = '', rpdbKey = '', noSearch = false) {
   let page = CONFIGURE_HTML.replace(/__LOGO_VERSION__/g, String(logoVersion()))
   page = page.replace('id="torbox" placeholder', `id="torbox" value="${escapeHtml(torboxKey)}" placeholder`)
   page = page.replace('id="tmdb" placeholder', `id="tmdb" value="${escapeHtml(tmdbKey)}" placeholder`)
   page = page.replace('id="rpdb" placeholder', `id="rpdb" value="${escapeHtml(rpdbKey)}" placeholder`)
+  if (noSearch) page = page.replace('type="checkbox" id="no-search"', 'type="checkbox" id="no-search" checked')
   return page
 }
 
@@ -117,7 +118,9 @@ app.get('/:config/configure', (req, res) => {
     res.type('html').send(configurePage())
     return
   }
-  res.type('html').send(configurePage(cfg.torbox_key || '', cfg.tmdb_key || '', cfg.rpdb_key || ''))
+  res.type('html').send(
+    configurePage(cfg.torbox_key || '', cfg.tmdb_key || '', cfg.rpdb_key || '', Boolean(cfg.no_search))
+  )
 })
 
 app.post('/api/validate', kind('validate'), rateLimit('validate', RATE_LIMITS.validate), async (req, res) => {

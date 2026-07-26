@@ -7,14 +7,28 @@ const HAS_DEFAULTS = Boolean(config.DEFAULT_TORBOX_API_KEY && config.DEFAULT_TMD
 const CUSTOM_MOVIES_CATALOG_ID = 'torbox-custom-movies'
 const CUSTOM_SERIES_CATALOG_ID = 'torbox-custom-series'
 
-function catalog(type, id, name) {
+function catalog(type, id, name, searchable = true) {
+  const extra = searchable ? [{ name: 'search' }, { name: 'skip' }] : [{ name: 'skip' }]
   return {
     type,
     id,
     name,
-    extra: [{ name: 'search' }, { name: 'skip' }],
-    extraSupported: ['search', 'skip'],
+    extra,
+    extraSupported: extra.map((e) => e.name),
   }
+}
+
+function buildCatalogs(searchable) {
+  return [
+    catalog('movie', 'torbox-movies', 'MyTorbox Movies', searchable),
+    catalog('series', 'torbox-series', 'MyTorbox Series', searchable),
+    catalog('movie', CUSTOM_MOVIES_CATALOG_ID, 'Custom Streams', searchable),
+    catalog('series', CUSTOM_SERIES_CATALOG_ID, 'Custom Streams', searchable),
+  ]
+}
+
+function searchDisabled(cfg) {
+  return Boolean(cfg && cfg.no_search)
 }
 
 const manifest = {
@@ -29,17 +43,13 @@ const manifest = {
     { name: 'stream', types: ['movie', 'series'], idPrefixes: ['tb:'] },
   ],
   types: ['movie', 'series'],
-  catalogs: [
-    catalog('movie', 'torbox-movies', 'MyTorbox Movies'),
-    catalog('series', 'torbox-series', 'MyTorbox Series'),
-    catalog('movie', CUSTOM_MOVIES_CATALOG_ID, 'Custom Streams'),
-    catalog('series', CUSTOM_SERIES_CATALOG_ID, 'Custom Streams'),
-  ],
+  catalogs: buildCatalogs(true),
   idPrefixes: ['tb:'],
   config: [
     { key: 'torbox_key', type: 'password', title: 'TorBox API Key', required: true },
     { key: 'tmdb_key', type: 'password', title: 'TMDB API Key', required: true },
     { key: 'rpdb_key', type: 'password', title: 'RPDB API Key (optional)' },
+    { key: 'no_search', type: 'checkbox', title: 'Keep my library out of Stremio search' },
   ],
   behaviorHints: {
     configurable: true,
@@ -98,6 +108,8 @@ async function getCatalog({ type, id, config: cfg, extra }) {
   const keys = resolveKeys(cfg)
   if (!keys) return { metas: [] }
 
+  if (searchDisabled(cfg) && extra && extra.search !== undefined) return { metas: [] }
+
   if (id === CUSTOM_MOVIES_CATALOG_ID || id === CUSTOM_SERIES_CATALOG_ID) {
     const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
     if (type === 'movie' && id === CUSTOM_MOVIES_CATALOG_ID) return { metas: selectMetas(custom.movies, extra) }
@@ -148,6 +160,7 @@ async function getStream({ type, id, config: cfg }) {
 function manifestFor(cfg) {
   return {
     ...manifest,
+    catalogs: searchDisabled(cfg) ? buildCatalogs(false) : manifest.catalogs,
     behaviorHints: {
       ...manifest.behaviorHints,
       configurationRequired: !resolveKeys(cfg),
