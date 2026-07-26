@@ -9,8 +9,6 @@ function slugify(text) {
 }
 
 const SITE_PREFIX_RE = /^www\.\S+?\s*[-–—]\s*/i
-// Same trackers, bracketed form: "[ Torrent911.ke ] Real.Movie.2024...". The final label must be
-// letters only so this can't eat an episode tag like "[S0.E05]".
 const BRACKET_SITE_PREFIX_RE = /^\[\s*[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\s*\]\s*/i
 // RiffTrax comedy-commentary releases prepend their own brand before the real movie title.
 const RIFFTRAX_PREFIX_RE = /^rifftrax\s*[-–—:]\s*/i
@@ -122,9 +120,6 @@ function* parseWorkItems(source, entry, resolver = DIRECT_RESOLVER) {
 
     if (!title) title = titleFromFilename(name)
 
-    // The only remaining reason to skip a video file: samples, trailers and disc menus, which are
-    // small and would otherwise mint junk rows. A failure to parse never costs a file — an episode
-    // with no number reaches season 0 via buildLibrary, and a nameless file borrows its filename.
     if (!isEpisode && (f.size || 0) < MIN_FILE_SIZE_BYTES) continue
 
     yield {

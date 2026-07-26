@@ -221,9 +221,6 @@ async function buildLibrary(torboxKey, tmdbKey, rpdbKey, entriesBySource = null,
     const logo = tmdb.logoUrl(seriesImages[i], tmdbRes && tmdbRes.original_language)
     if (logo) preview.logo = logo
 
-    // Files we couldn't number (creditless openings, digests, one-off specials) are parked in
-    // season 0 rather than discarded, after any real season-0 specials, and keep their filename
-    // as the video title so they're recognisable in the episode list.
     const specialTitles = new Map()
     if (g.unnumbered.length) {
       let slot = 0
