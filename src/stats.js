@@ -190,7 +190,7 @@ async function writeLibraryShape(hash, shape) {
 function trackLibraryShape(hash, lib, buildMs) {
   if (!enabled() || !hash || !lib) return
   const streamIds = Object.keys(lib.streams || {})
-  const episodes = streamIds.filter((id) => id.startsWith('tb:series:')).length
+  const episodes = streamIds.filter((id) => /:\d+:\d+$/.test(id)).length
   const streams = streamIds.reduce((n, id) => n + (lib.streams[id] || []).length, 0)
   const shape = {
     movies: (lib.movies || []).length,

@@ -46,11 +46,11 @@ async function buildCustomCatalog(torboxKey, tmdbKey, rpdbKey) {
     return imdbId ? tmdb.findByImdbId(imdbId, tmdbKey) : null
   })
 
-  const movieImages = await mapLimit(movieFinds, TMDB_CONCURRENCY, (f) =>
-    f ? tmdb.getImages(f.kind, f.result.id, tmdbKey) : null
+  const movieDetails = await mapLimit(movieFinds, TMDB_CONCURRENCY, (f) =>
+    f ? tmdb.getDetails(f.kind, f.result.id, tmdbKey) : null
   )
-  const seriesImages = await mapLimit(seriesFinds, TMDB_CONCURRENCY, (f) =>
-    f ? tmdb.getImages(f.kind, f.result.id, tmdbKey) : null
+  const seriesDetails = await mapLimit(seriesFinds, TMDB_CONCURRENCY, (f) =>
+    f ? tmdb.getDetails(f.kind, f.result.id, tmdbKey) : null
   )
 
   movieGroupKeys.forEach((groupKey, i) => {
@@ -69,7 +69,7 @@ async function buildCustomCatalog(torboxKey, tmdbKey, rpdbKey) {
     }
     const year = tmdbRes && tmdbRes.release_date ? tmdbRes.release_date.slice(0, 4) : null
     if (year) preview.releaseInfo = String(year)
-    const logo = tmdb.logoUrl(movieImages[i], tmdbRes && tmdbRes.original_language)
+    const logo = tmdb.logoUrl(movieDetails[i] && movieDetails[i].images, tmdbRes && tmdbRes.original_language)
     if (logo) preview.logo = logo
 
     lib.movies.push(preview)
@@ -100,7 +100,7 @@ async function buildCustomCatalog(torboxKey, tmdbKey, rpdbKey) {
     }
     const year = tmdbRes && tmdbRes.first_air_date ? tmdbRes.first_air_date.slice(0, 4) : null
     if (year) preview.releaseInfo = String(year)
-    const logo = tmdb.logoUrl(seriesImages[i], tmdbRes && tmdbRes.original_language)
+    const logo = tmdb.logoUrl(seriesDetails[i] && seriesDetails[i].images, tmdbRes && tmdbRes.original_language)
     if (logo) preview.logo = logo
 
     const videos = []

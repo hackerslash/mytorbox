@@ -40,11 +40,11 @@ const manifest = {
   resources: [
     'catalog',
     { name: 'meta', types: ['movie', 'series'], idPrefixes: ['tb:'] },
-    { name: 'stream', types: ['movie', 'series'], idPrefixes: ['tb:'] },
+    { name: 'stream', types: ['movie', 'series'], idPrefixes: ['tt', 'tb:'] },
   ],
   types: ['movie', 'series'],
   catalogs: buildCatalogs(true),
-  idPrefixes: ['tb:'],
+  idPrefixes: ['tt', 'tb:'],
   config: [
     { key: 'torbox_key', type: 'password', title: 'TorBox API Key', required: true },
     { key: 'tmdb_key', type: 'password', title: 'TMDB API Key', required: true },

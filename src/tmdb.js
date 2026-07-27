@@ -5,7 +5,7 @@ const redis = require('./redisClient')
 const stats = require('./stats')
 
 const cache = new Map()
-const imagesCache = new Map()
+const detailsCache = new Map()
 const findCache = new Map()
 async function cachedLookup(ns, l1, l1key, fetchFn) {
   if (l1.has(l1key)) {
@@ -68,11 +68,18 @@ function posterUrl(result) {
   return `${TMDB_IMAGE_BASE}${result.poster_path}`
 }
 
-async function getImages(kind, tmdbId, apiKey) {
+async function getDetails(kind, tmdbId, apiKey) {
   const key = `${kind}:${tmdbId}`
-  return cachedLookup('i', imagesCache, key, async () => {
+  return cachedLookup('d', detailsCache, key, async () => {
     try {
-      return await getJson(`${TMDB_BASE}/${kind}/${tmdbId}/images?api_key=${apiKey}`)
+      const append = kind === 'movie' ? 'images' : 'images,external_ids'
+      const data = await getJson(`${TMDB_BASE}/${kind}/${tmdbId}?api_key=${apiKey}&append_to_response=${append}`)
+      if (!data) return null
+      const imdbId = kind === 'movie' ? data.imdb_id : data.external_ids && data.external_ids.imdb_id
+      return {
+        imdbId: /^tt\d+$/.test(imdbId || '') ? imdbId : null,
+        images: data.images || null,
+      }
     } catch {
       return null
     }
@@ -105,8 +112,8 @@ async function findByImdbId(imdbId, apiKey) {
 
 function clearCache() {
   cache.clear()
-  imagesCache.clear()
+  detailsCache.clear()
   findCache.clear()
 }
 
-module.exports = { search, posterUrl, getImages, logoUrl, findByImdbId, clearCache }
+module.exports = { search, posterUrl, getDetails, logoUrl, findByImdbId, clearCache }

@@ -14,7 +14,7 @@ const {
   MAX_CACHE_VALUE_BYTES,
 } = require('./config')
 
-const TMDB_CONCURRENCY = 5
+const TMDB_CONCURRENCY = 20
 
 // Cached streams keep only what's needed to rebuild the download URL later —
 // never the raw TorBox key, since this object is what gets persisted to Redis.
@@ -48,13 +48,18 @@ function posterUrlFor(tmdbRes, kind, rpdbKey) {
 }
 
 const TMDB_ID_IN_ID_RE = /^tb:(?:movie|series):tmdb-(\d+)(?::|$)/
+const IMDB_ID_RE = /^tt\d+$/
+
+function rpdbPosterFor(id, type, rpdbKey) {
+  if (IMDB_ID_RE.test(id)) return rpdb.posterUrlByImdb(rpdbKey, id)
+  const match = TMDB_ID_IN_ID_RE.exec(id)
+  return match ? rpdb.posterUrl(rpdbKey, match[1], type) : null
+}
 
 function withRpdbPosters(items, rpdbKey) {
   if (!rpdbKey) return items
   return items.map((item) => {
-    const match = TMDB_ID_IN_ID_RE.exec(item.id || '')
-    if (!match) return item
-    const poster = rpdb.posterUrl(rpdbKey, match[1], item.type)
+    const poster = rpdbPosterFor(item.id || '', item.type, rpdbKey)
     return poster ? { ...item, poster } : item
   })
 }
@@ -72,14 +77,24 @@ async function mapLimit(items, limit, fn) {
   return results
 }
 
+async function fetchDetails(kind, results, tmdbKey) {
+  const ids = [...new Set(results.filter(Boolean).map((res) => res.id))]
+  const fetched = await mapLimit(ids, TMDB_CONCURRENCY, (id) => tmdb.getDetails(kind, id, tmdbKey))
+  return new Map(ids.map((id, i) => [id, fetched[i]]))
+}
+
+function detailsOf(details, tmdbRes) {
+  return (tmdbRes && details.get(tmdbRes.id)) || null
+}
+
 /** Different raw filenames (alternate/regional titles) can resolve to the
  * same TMDB entry. Merge those groups so the catalog shows one entry. */
-function dedupeByTmdb(keysAndGroups, results, mergeFn) {
+function dedupeByTmdb(keysAndGroups, results, imdbIds, mergeFn) {
   const merged = new Map()
   const order = []
   keysAndGroups.forEach(([rawKey, g], i) => {
     const res = results[i]
-    const canonical = res ? `tmdb-${res.id}` : `raw-${rawKey}`
+    const canonical = imdbIds[i] || (res ? `tmdb-${res.id}` : `raw-${rawKey}`)
     if (!merged.has(canonical)) {
       merged.set(canonical, { group: g, tmdb: res })
       order.push(canonical)
@@ -109,6 +124,10 @@ function mergeSeriesGroups(dst, src) {
     if (!dst.episodes.has(epKey)) dst.episodes.set(epKey, [])
     dst.episodes.get(epKey).push(...items)
   }
+}
+
+function catalogIdFor(type, canonical) {
+  return IMDB_ID_RE.test(canonical) ? canonical : `tb:${type}:${canonical}`
 }
 
 function byCreatedAtDesc([, a], [, b]) {
@@ -216,20 +235,19 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
     tmdb.search(g.title, g.year, 'tv', tmdbKey)
   )
 
+  const movieDetails = await fetchDetails('movie', movieResults, tmdbKey)
+  const seriesDetails = await fetchDetails('tv', seriesResults, tmdbKey)
+
+  const movieImdbIds = movieResults.map((res) => (detailsOf(movieDetails, res) || {}).imdbId || null)
+  const seriesImdbIds = seriesResults.map((res) => (detailsOf(seriesDetails, res) || {}).imdbId || null)
+
   const lib = { movies: [], series: [], meta: {}, streams: {} }
 
-  const moviesMerged = dedupeByTmdb(movieKeys, movieResults, mergeMovieGroups).sort(byCreatedAtDesc)
-  const seriesMerged = dedupeByTmdb(seriesKeys, seriesResults, mergeSeriesGroups).sort(byCreatedAtDesc)
+  const moviesMerged = dedupeByTmdb(movieKeys, movieResults, movieImdbIds, mergeMovieGroups).sort(byCreatedAtDesc)
+  const seriesMerged = dedupeByTmdb(seriesKeys, seriesResults, seriesImdbIds, mergeSeriesGroups).sort(byCreatedAtDesc)
 
-  const movieImages = await mapLimit(moviesMerged, TMDB_CONCURRENCY, ([, , tmdbRes]) =>
-    tmdbRes ? tmdb.getImages('movie', tmdbRes.id, tmdbKey) : null
-  )
-  const seriesImages = await mapLimit(seriesMerged, TMDB_CONCURRENCY, ([, , tmdbRes]) =>
-    tmdbRes ? tmdb.getImages('tv', tmdbRes.id, tmdbKey) : null
-  )
-
-  moviesMerged.forEach(([canonical, g, tmdbRes], i) => {
-    const mid = `tb:movie:${canonical}`
+  moviesMerged.forEach(([canonical, g, tmdbRes]) => {
+    const mid = catalogIdFor('movie', canonical)
     const year = g.year || (tmdbRes && tmdbRes.release_date ? tmdbRes.release_date.slice(0, 4) : null)
     const preview = {
       id: mid,
@@ -238,15 +256,15 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
       poster: tmdb.posterUrl(tmdbRes),
     }
     if (year) preview.releaseInfo = String(year)
-    const logo = tmdb.logoUrl(movieImages[i], tmdbRes && tmdbRes.original_language)
+    const logo = tmdb.logoUrl((detailsOf(movieDetails, tmdbRes) || {}).images, tmdbRes && tmdbRes.original_language)
     if (logo) preview.logo = logo
     lib.movies.push(preview)
     lib.meta[mid] = { ...preview, description: tmdbRes ? tmdbRes.overview : null }
     lib.streams[mid] = sortedBySize(g.items).map(streamEntry)
   })
 
-  seriesMerged.forEach(([canonical, g, tmdbRes], i) => {
-    const sid = `tb:series:${canonical}`
+  seriesMerged.forEach(([canonical, g, tmdbRes]) => {
+    const sid = catalogIdFor('series', canonical)
     const year = g.year || (tmdbRes && tmdbRes.first_air_date ? tmdbRes.first_air_date.slice(0, 4) : null)
     const preview = {
       id: sid,
@@ -255,7 +273,7 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
       poster: tmdb.posterUrl(tmdbRes),
     }
     if (year) preview.releaseInfo = String(year)
-    const logo = tmdb.logoUrl(seriesImages[i], tmdbRes && tmdbRes.original_language)
+    const logo = tmdb.logoUrl((detailsOf(seriesDetails, tmdbRes) || {}).images, tmdbRes && tmdbRes.original_language)
     if (logo) preview.logo = logo
 
     const specialTitles = new Map()
