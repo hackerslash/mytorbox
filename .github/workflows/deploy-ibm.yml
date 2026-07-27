@@ -14,11 +14,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Install IBM Cloud CLI + Code Engine plugin
+      - name: Install IBM Cloud CLI + plugins
         run: |
           curl -fsSL https://clis.cloud.ibm.com/install/linux | sh
           ibmcloud --version
           ibmcloud plugin install code-engine -f
+          ibmcloud plugin install container-registry -f
 
       - name: Log in to IBM Cloud
         env:
@@ -36,3 +37,9 @@ jobs:
 
       - name: Report status
         run: ibmcloud ce app get --name mytorbox
+
+      - name: Purge old registry images
+        run: |
+          ibmcloud cr region-set us-south
+          ibmcloud cr image-prune-untagged --restrict mytorboxicr -f
+          ibmcloud cr retention-run --images 2 -f mytorboxicr
