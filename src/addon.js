@@ -33,7 +33,7 @@ function searchDisabled(cfg) {
 
 const manifest = {
   id: 'addon.mytorbox',
-  version: '1.1.0',
+  version: '1.0.2',
   name: 'MyTorbox',
   description: 'Browse your TorBox torrents and web downloads as a Stremio catalog with TMDB posters',
   logo: config.BASE_URL ? `${config.BASE_URL}/logo.png` : '/logo.png',
