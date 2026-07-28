@@ -337,13 +337,28 @@ function redisKeyFor(cacheKey) {
 function parseCacheKeyFor(cacheKey) {
   return `pc:${cacheKey}`
 }
+
+function partKeyFor(cacheKey, index) {
+  return `libp:${cacheKey}:${index}`
+}
+
 const GZIP_PREFIX = 'gz:'
+const ENVELOPE_PREFIX = 'e2:'
+const MAX_CACHE_PARTS = 8
 
 function packValue(obj) {
-  return GZIP_PREFIX + zlib.gzipSync(Buffer.from(JSON.stringify(obj))).toString('base64')
+  return zlib.gzipSync(Buffer.from(JSON.stringify(obj)))
+}
+
+function isGzip(buf) {
+  return buf.length > 1 && buf[0] === 0x1f && buf[1] === 0x8b
 }
 
 function unpackValue(raw) {
+  if (Buffer.isBuffer(raw)) {
+    if (isGzip(raw)) return JSON.parse(zlib.gunzipSync(raw).toString())
+    return unpackValue(raw.toString())
+  }
   if (typeof raw !== 'string') return null
   if (raw.startsWith(GZIP_PREFIX)) {
     return JSON.parse(zlib.gunzipSync(Buffer.from(raw.slice(GZIP_PREFIX.length), 'base64')).toString())
@@ -357,11 +372,43 @@ function packWithLimit(obj) {
   return [Buffer.byteLength(packed) > MAX_CACHE_VALUE_BYTES, packed]
 }
 
+function chunksOf(packed) {
+  const parts = []
+  for (let i = 0; i < packed.length; i += MAX_CACHE_VALUE_BYTES) {
+    parts.push(packed.subarray(i, i + MAX_CACHE_VALUE_BYTES))
+  }
+  return parts.length ? parts : [packed]
+}
+
+function envelopeValue(record, parts) {
+  return ENVELOPE_PREFIX + JSON.stringify({
+    parts,
+    fingerprint: record.fingerprint,
+    tip: record.tip,
+    validatedAt: record.validatedAt,
+    probedAt: record.probedAt,
+  })
+}
+
+function isEnvelope(buf) {
+  return buf.length >= ENVELOPE_PREFIX.length && buf.subarray(0, ENVELOPE_PREFIX.length).toString() === ENVELOPE_PREFIX
+}
+
 async function getCachedRecord(cacheKey) {
   if (redis) {
     try {
-      const raw = await redis.get(redisKeyFor(cacheKey))
-      return raw ? unpackValue(raw) : null
+      const raw = await redis.getBuffer(redisKeyFor(cacheKey))
+      if (!raw) return null
+      if (!isEnvelope(raw)) return unpackValue(raw)
+      const envelope = JSON.parse(raw.subarray(ENVELOPE_PREFIX.length).toString())
+      const chunks = await Promise.all(
+        Array.from({ length: envelope.parts }, (_, i) => redis.getBuffer(partKeyFor(cacheKey, i)))
+      )
+      if (chunks.some((chunk) => !chunk)) {
+        stats.track('lib:parts_missing')
+        return null
+      }
+      return { ...envelope, lib: unpackValue(Buffer.concat(chunks)) }
     } catch (err) {
       console.warn('library: redis get failed, treating as cache miss:', err.message)
       return null
@@ -379,13 +426,20 @@ async function getCachedRecord(cacheKey) {
 async function setCachedRecord(cacheKey, record) {
   if (redis) {
     try {
-      const [tooBig, packed] = packWithLimit(record)
-      if (tooBig) {
+      const parts = chunksOf(packValue(record.lib))
+      if (parts.length > MAX_CACHE_PARTS) {
         console.warn('library: skipping cache write, library too large even compressed')
         stats.track('lib:too_big')
         return
       }
-      await redis.set(redisKeyFor(cacheKey), packed, 'EX', LIBRARY_HARD_TTL_SECONDS)
+      for (let i = 0; i < parts.length; i++) {
+        await redis.set(partKeyFor(cacheKey, i), parts[i], 'EX', LIBRARY_HARD_TTL_SECONDS)
+      }
+      const tail = redis.pipeline()
+      for (let i = parts.length; i < MAX_CACHE_PARTS; i++) tail.del(partKeyFor(cacheKey, i))
+      tail.set(redisKeyFor(cacheKey), envelopeValue(record, parts.length), 'EX', LIBRARY_HARD_TTL_SECONDS)
+      await tail.exec()
+      if (parts.length > 1) stats.track('lib:chunked')
       return
     } catch (err) {
       console.warn('library: redis set failed:', err.message)
@@ -395,11 +449,32 @@ async function setCachedRecord(cacheKey, record) {
   memCache.set(cacheKey, { record, storedAt: Date.now() })
 }
 
+// A revalidation that leaves the library bytes untouched only needs the envelope
+// rewritten — rewriting the parts too would re-upload the whole library.
+async function touchCachedRecord(cacheKey, record) {
+  if (!redis) {
+    memCache.set(cacheKey, { record, storedAt: Date.now() })
+    return
+  }
+  if (!record.parts) {
+    await setCachedRecord(cacheKey, record)
+    return
+  }
+  try {
+    const touch = redis.pipeline()
+    for (let i = 0; i < record.parts; i++) touch.expire(partKeyFor(cacheKey, i), LIBRARY_HARD_TTL_SECONDS)
+    touch.set(redisKeyFor(cacheKey), envelopeValue(record, record.parts), 'EX', LIBRARY_HARD_TTL_SECONDS)
+    await touch.exec()
+  } catch (err) {
+    console.warn('library: redis touch failed:', err.message)
+  }
+}
+
 async function loadParseCache(cacheKey) {
   const map = new Map()
   if (!redis || !cacheKey) return map
   try {
-    const raw = await redis.get(parseCacheKeyFor(cacheKey))
+    const raw = await redis.getBuffer(parseCacheKeyFor(cacheKey))
     if (raw) {
       const obj = unpackValue(raw)
       for (const k of Object.keys(obj)) map.set(k, obj[k])
@@ -435,12 +510,12 @@ async function probeUnchanged(cacheKey, cached, torboxKey) {
       return false
     }
     stats.track('lib:probe_unchanged')
-    await setCachedRecord(cacheKey, { ...cached, probedAt: Date.now() })
+    await touchCachedRecord(cacheKey, { ...cached, probedAt: Date.now() })
     return true
   } catch (err) {
     stats.track('lib:probe_error')
     console.warn('library: tip probe failed, falling back to cached library:', err.message)
-    await setCachedRecord(cacheKey, { ...cached, probedAt: Date.now() })
+    await touchCachedRecord(cacheKey, { ...cached, probedAt: Date.now() })
     return true
   }
 }
@@ -476,7 +551,7 @@ async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
 
     if (!force && fresh && fresh.lib && fresh.fingerprint === fingerprint) {
       stats.track('lib:unchanged')
-      await setCachedRecord(cacheKey, { lib: fresh.lib, fingerprint, tip, validatedAt: Date.now(), probedAt: Date.now() })
+      await touchCachedRecord(cacheKey, { ...fresh, fingerprint, tip, validatedAt: Date.now(), probedAt: Date.now() })
       return fresh.lib
     }
     const startedAt = Date.now()
@@ -502,6 +577,7 @@ async function clearCache() {
     try {
       const all = [
         ...(await redis.keys('lib:*')),
+        ...(await redis.keys('libp:*')),
         ...(await redis.keys('pc:*')),
         ...(await redis.keys('tmdb:*')),
       ]

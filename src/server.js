@@ -357,7 +357,7 @@ function uaClass(req) {
   return match ? match[1] : 'other'
 }
 
-function manifestHandler(req, res) {
+async function manifestHandler(req, res) {
   req.statsKind = 'manifest'
   const cfg = req.params.config ? decodeConfigParam(req.params.config) : null
   if (!defaultAccessAllowed(req, cfg)) {
@@ -366,7 +366,7 @@ function manifestHandler(req, res) {
   }
   trackConfiguredUser(cfg)
   stats.track(cfg ? 'manifest:configured' : 'manifest:default')
-  res.type('application/json').send(JSON.stringify(addon.manifestFor(cfg)))
+  res.type('application/json').send(JSON.stringify(await addon.manifestFor(cfg)))
 }
 
 app.get('/manifest.json', manifestHandler)

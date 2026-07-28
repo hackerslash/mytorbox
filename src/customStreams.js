@@ -157,6 +157,17 @@ async function listCustomStreams(torboxKey, tmdbKey, rpdbKey) {
   }
 }
 
+async function hasCustomStreams(torboxKey, tmdbKey, rpdbKey) {
+  if (!redis) return false
+  try {
+    const idx = idxKey(userKeyFor(torboxKey, tmdbKey, rpdbKey))
+    return (await redis.zcount(idx, Date.now(), '+inf')) > 0
+  } catch (err) {
+    console.warn('customStreams: hasCustomStreams failed:', err.message)
+    return true
+  }
+}
+
 async function removeCustomStream(torboxKey, tmdbKey, rpdbKey, entryId) {
   if (!redis) return false
 
@@ -177,6 +188,7 @@ async function removeCustomStream(torboxKey, tmdbKey, rpdbKey, entryId) {
 module.exports = {
   addCustomStream,
   listCustomStreams,
+  hasCustomStreams,
   removeCustomStream,
   isValidImdbId,
   isValidStreamUrl,

@@ -249,6 +249,7 @@ function splitStatsKey(key) {
 
 const KEYSPACE_GROUPS = [
   { name: 'library', match: 'lib:*' },
+  { name: 'libraryParts', match: 'libp:*' },
   { name: 'parseCache', match: 'pc:*' },
   { name: 'customStreams', match: 'cs:*' },
   { name: 'rateLimit', match: 'rl:*' },
@@ -435,6 +436,7 @@ async function buildSummary() {
 
   const counted =
     (groups.library || []).length +
+    (groups.libraryParts || []).length +
     (groups.parseCache || []).length +
     csKeys.length +
     rlKeys.length +
@@ -475,6 +477,7 @@ async function buildSummary() {
     keyspace: {
       total: dbsize,
       library: (groups.library || []).length,
+      libraryParts: (groups.libraryParts || []).length,
       parseCache: (groups.parseCache || []).length,
       customStreams: csKeys.length,
       rateLimit: rlKeys.length,

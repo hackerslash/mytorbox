@@ -1,6 +1,7 @@
 const config = require('./config')
 const { getLibrary, hydrateStreams, withRpdbPosters } = require('./library')
 const { buildCustomCatalog } = require('./customCatalog')
+const customStreams = require('./customStreams')
 
 const HAS_DEFAULTS = Boolean(config.DEFAULT_TORBOX_API_KEY && config.DEFAULT_TMDB_API_KEY)
 
@@ -18,13 +19,16 @@ function catalog(type, id, name, searchable = true) {
   }
 }
 
-function buildCatalogs(searchable) {
-  return [
+function buildCatalogs(searchable, includeCustom = true) {
+  const catalogs = [
     catalog('movie', 'torbox-movies', 'MyTorbox Movies', searchable),
     catalog('series', 'torbox-series', 'MyTorbox Series', searchable),
-    catalog('movie', CUSTOM_MOVIES_CATALOG_ID, 'Custom Streams', searchable),
-    catalog('series', CUSTOM_SERIES_CATALOG_ID, 'Custom Streams', searchable),
   ]
+  if (includeCustom) {
+    catalogs.push(catalog('movie', CUSTOM_MOVIES_CATALOG_ID, 'Custom Streams', searchable))
+    catalogs.push(catalog('series', CUSTOM_SERIES_CATALOG_ID, 'Custom Streams', searchable))
+  }
+  return catalogs
 }
 
 function searchDisabled(cfg) {
@@ -161,13 +165,17 @@ async function getStream({ type, id, config: cfg }) {
   return { streams: hydrateStreams(entries, keys.torboxKey) }
 }
 
-function manifestFor(cfg) {
+async function manifestFor(cfg) {
+  const keys = resolveKeys(cfg)
+  const includeCustom = keys
+    ? await customStreams.hasCustomStreams(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
+    : true
   return {
     ...manifest,
-    catalogs: searchDisabled(cfg) ? buildCatalogs(false) : manifest.catalogs,
+    catalogs: buildCatalogs(!searchDisabled(cfg), includeCustom),
     behaviorHints: {
       ...manifest.behaviorHints,
-      configurationRequired: !resolveKeys(cfg),
+      configurationRequired: !keys,
     },
   }
 }
