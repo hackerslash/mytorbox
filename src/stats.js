@@ -10,6 +10,7 @@ const {
   STATS_SCAN_LIMIT,
   STATS_TOP_LIBRARIES,
   STATS_LIBRARY_SAMPLE_LIMIT,
+  STATS_MISS_SAMPLE_LIMIT,
 } = require('./config')
 
 const NS = 'st'
@@ -55,6 +56,10 @@ function usersKey(day) {
 
 function firstSeenKey(userHash) {
   return `${NS}:first:${userHash}`
+}
+
+function missKey(day) {
+  return `${NS}:miss:${day}`
 }
 
 function libraryKey(userHash) {
@@ -178,6 +183,83 @@ function trackUser(keys) {
   const hash = userHash(keys)
   if (!hash || throttled(hash)) return
   markUser(hash).catch(() => {})
+}
+
+async function writeMissSample(day, entry) {
+  const key = missKey(day)
+  const pipe = redis.pipeline()
+  pipe.lpush(key, JSON.stringify(entry))
+  pipe.ltrim(key, 0, STATS_MISS_SAMPLE_LIMIT - 1)
+  pipe.expire(key, STATS_TTL_SECONDS)
+  await pipe.exec()
+}
+
+// A misassembled URL can land the base64 config — which carries the API keys — in the id
+// segment, where it parses as neither config nor id and would otherwise be stored verbatim.
+// Only blobs that really decode to a config object are replaced, so genuine ids are untouched.
+const BLOB_RE = /[A-Za-z0-9_-]{40,}/g
+
+function isConfigBlob(s) {
+  try {
+    const parsed = JSON.parse(Buffer.from(s, 'base64url').toString('utf8'))
+    return Boolean(parsed && (parsed.torbox_key || parsed.tmdb_key || parsed.rpdb_key))
+  } catch {
+    return false
+  }
+}
+
+function redactSecrets(value, keys) {
+  let out = String(value).replace(BLOB_RE, (m) => (isConfigBlob(m) ? '<config>' : m))
+  for (const key of [keys && keys.torboxKey, keys && keys.tmdbKey, keys && keys.rpdbKey]) {
+    if (key && key.length >= 8) out = out.split(key).join('<key>')
+  }
+  return out
+}
+
+function trackMiss(kind, id, ua, keys) {
+  if (!enabled()) return
+  const hash = userHash(keys)
+  writeMissSample(dayId(), {
+    kind,
+    id: redactSecrets(id == null ? '' : id, keys).slice(0, 200),
+    ua: ua ? redactSecrets(ua, keys).slice(0, 120) : null,
+    user: hash ? hash.slice(0, 12) : null,
+    at: Date.now(),
+  }).catch(() => {})
+}
+
+async function readMisses(day) {
+  let raw = []
+  try {
+    raw = await redis.lrange(missKey(day), 0, STATS_MISS_SAMPLE_LIMIT - 1)
+  } catch {
+    return null
+  }
+  const samples = []
+  for (const s of raw) {
+    try {
+      samples.push(JSON.parse(s))
+    } catch {}
+  }
+  const byId = {}
+  const byUser = {}
+  const byKind = {}
+  for (const s of samples) {
+    byId[`${s.kind}:${s.id}`] = (byId[`${s.kind}:${s.id}`] || 0) + 1
+    byUser[s.user || 'unconfigured'] = (byUser[s.user || 'unconfigured'] || 0) + 1
+    byKind[s.kind] = (byKind[s.kind] || 0) + 1
+  }
+  return {
+    sampled: samples.length,
+    distinctIds: Object.keys(byId).length,
+    byKind,
+    byUser,
+    topIds: Object.entries(byId)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 25)
+      .map(([id, n]) => ({ id, n })),
+    recent: samples.slice(0, 25),
+  }
 }
 
 async function writeLibraryShape(hash, shape) {
@@ -417,6 +499,7 @@ async function buildSummary() {
   const availableUserDays = new Set(userDayKeys.map((k) => k.slice(`${NS}:u:`.length)))
   const unique = await uniqueUsers(days, availableUserDays)
   const library = await readLibraryShapes(libShapeKeys)
+  const misses = await readMisses(dayId())
 
   const csKeys = groups.customStreams || []
   const rlKeys = groups.rateLimit || []
@@ -473,6 +556,7 @@ async function buildSummary() {
       verifiedCached: csKeys.filter((k) => k.startsWith('cs:verified:')).length,
     },
     rateLimit: { trackedIps: rlKeys.length, byBucket: rateLimitIps },
+    misses,
     counters,
     keyspace: {
       total: dbsize,
@@ -517,6 +601,7 @@ module.exports = {
   trackHourly,
   trackDuration,
   trackUser,
+  trackMiss,
   trackLibraryShape,
   flushNow,
   summary,
