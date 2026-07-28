@@ -328,6 +328,35 @@ function knownType(type) {
   return type === 'movie' || type === 'series' ? type : 'other'
 }
 
+const ID_SHAPES = [
+  [/^tt\d+$/, 'imdb'],
+  [/^tt\d+:\d+:\d+$/, 'imdb-episode'],
+  [/^tb:custom:/, 'tb-custom'],
+  [/^tb:(movie|series):tmdb-\d+$/, 'tb-tmdb'],
+  [/^tb:(movie|series):tmdb-\d+:\d+:\d+$/, 'tb-tmdb-episode'],
+  [/^tb:(movie|series):raw-/, 'tb-raw'],
+  [/^tb:/, 'tb-other'],
+]
+
+function idShape(id) {
+  const match = ID_SHAPES.find(([re]) => re.test(id))
+  return match ? match[1] : 'other'
+}
+
+const UA_CLASSES = [
+  [/stremio/i, 'stremio'],
+  [/aiostream/i, 'aiostreams'],
+  [/^Mozilla\//, 'browser'],
+  [/node|undici|axios|got|okhttp|python|curl|wget|go-http|java|libwww|bot|http/i, 'http-client'],
+]
+
+function uaClass(req) {
+  const ua = req.get('user-agent')
+  if (!ua) return 'none'
+  const match = UA_CLASSES.find(([re]) => re.test(ua))
+  return match ? match[1] : 'other'
+}
+
 function manifestHandler(req, res) {
   req.statsKind = 'manifest'
   const cfg = req.params.config ? decodeConfigParam(req.params.config) : null
@@ -390,10 +419,14 @@ async function metaHandler(req, res) {
     const result = await addon.getMeta({ type, id, config: cfg })
     if (!result) {
       stats.track('meta:not_found')
+      stats.track(`meta:miss:${idShape(id)}`)
+      stats.track(`meta:miss:ua:${uaClass(req)}`)
+      if (!addon.resolveKeys(cfg)) stats.track('meta:miss:unconfigured')
       res.status(404).json({ err: 'not found' })
       return
     }
     stats.track(`meta:${knownType(type)}`)
+    stats.track(`meta:hit:${idShape(id)}`)
     res.type('application/json').send(JSON.stringify(result))
   } catch (err) {
     console.error('meta handler error:', err)
