@@ -418,10 +418,12 @@ async function metaHandler(req, res) {
   try {
     const result = await addon.getMeta({ type, id, config: cfg })
     if (!result) {
+      const keys = addon.resolveKeys(cfg)
       stats.track('meta:not_found')
       stats.track(`meta:miss:${idShape(id)}`)
       stats.track(`meta:miss:ua:${uaClass(req)}`)
-      if (!addon.resolveKeys(cfg)) stats.track('meta:miss:unconfigured')
+      if (!keys) stats.track('meta:miss:unconfigured')
+      stats.trackMiss('meta', id, req.get('user-agent'), keys)
       res.status(404).json({ err: 'not found' })
       return
     }
@@ -449,6 +451,8 @@ async function streamHandler(req, res) {
     const result = await addon.getStream({ type, id, config: cfg })
     if (!result) {
       stats.track('stream:not_found')
+      stats.track(`stream:miss:${idShape(id)}`)
+      stats.trackMiss('stream', id, req.get('user-agent'), addon.resolveKeys(cfg))
       res.status(404).json({ err: 'not found' })
       return
     }
