@@ -61,6 +61,23 @@ const manifest = {
   },
 }
 
+function placeholderMeta(id, type, name, description) {
+  const meta = { id, type, name, description }
+  if (config.BASE_URL) meta.poster = `${config.BASE_URL}/logo.png`
+  if (type === 'series') meta.videos = []
+  return meta
+}
+
+const EXPIRED_CUSTOM = [
+  'Custom stream expired',
+  'This custom stream has expired. Add it again from the MyTorbox configure page to restore it.',
+]
+
+const OUTDATED_ITEM = [
+  'Outdated item',
+  'This entry no longer matches your MyTorbox library. Reload or reinstall the addon to refresh your catalog.',
+]
+
 function resolveKeys(cfg) {
   if (cfg && cfg.torbox_key && cfg.tmdb_key) {
     return { torboxKey: cfg.torbox_key, tmdbKey: cfg.tmdb_key, rpdbKey: cfg.rpdb_key || null }
@@ -138,14 +155,16 @@ async function getMeta({ type, id, config: cfg }) {
   if (id.startsWith('tb:custom:')) {
     const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
     const item = custom.meta[id]
-    if (!item || item.type !== type) return null
-    return { meta: item }
+    if (item && item.type === type) return { meta: item }
+    if (id.startsWith(`tb:custom:${type}:`)) return { meta: placeholderMeta(id, type, ...EXPIRED_CUSTOM) }
+    return null
   }
 
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey, keys.rpdbKey)
   const item = lib.meta[id]
-  if (!item || item.type !== type) return null
-  return { meta: withRpdbPosters([item], keys.rpdbKey)[0] }
+  if (item && item.type === type) return { meta: withRpdbPosters([item], keys.rpdbKey)[0] }
+  if (id.startsWith(`tb:${type}:`)) return { meta: placeholderMeta(id, type, ...OUTDATED_ITEM) }
+  return null
 }
 
 async function getStream({ type, id, config: cfg }) {

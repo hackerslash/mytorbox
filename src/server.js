@@ -423,7 +423,6 @@ async function metaHandler(req, res) {
       stats.track(`meta:miss:${idShape(id)}`)
       stats.track(`meta:miss:ua:${uaClass(req)}`)
       if (!keys) stats.track('meta:miss:unconfigured')
-      stats.trackMiss('meta', id, req.get('user-agent'), keys)
       res.status(404).json({ err: 'not found' })
       return
     }
@@ -452,7 +451,6 @@ async function streamHandler(req, res) {
     if (!result) {
       stats.track('stream:not_found')
       stats.track(`stream:miss:${idShape(id)}`)
-      stats.trackMiss('stream', id, req.get('user-agent'), addon.resolveKeys(cfg))
       res.status(404).json({ err: 'not found' })
       return
     }
