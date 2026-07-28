@@ -8,6 +8,7 @@ const {
   STATS_USER_THROTTLE_MS,
   STATS_SUMMARY_TTL_SECONDS,
   STATS_SCAN_LIMIT,
+  STATS_HOURLY_TTL_SECONDS,
   STATS_TOP_LIBRARIES,
   STATS_LIBRARY_SAMPLE_LIMIT,
 } = require('./config')
@@ -79,6 +80,10 @@ let flushing = null
 const ttlSet = new Set()
 let ttlSetDay = null
 
+function ttlFor(key) {
+  return key.startsWith(`${NS}:h:`) ? STATS_HOURLY_TTL_SECONDS : STATS_TTL_SECONDS
+}
+
 function needsTtl(key) {
   const day = dayId()
   if (day !== ttlSetDay) {
@@ -110,18 +115,24 @@ async function flush() {
   const batch = [...pending]
   pending.clear()
   const pipe = redis.pipeline()
-  const ttlKeys = []
+  const ops = []
   for (const [key, by] of batch) {
     pipe.incrby(key, by)
+    ops.push(null)
     if (needsTtl(key)) {
-      pipe.expire(key, STATS_TTL_SECONDS)
-      ttlKeys.push(key)
+      pipe.expire(key, ttlFor(key))
+      ops.push(key)
     }
   }
   try {
-    await pipe.exec()
+    const replies = await pipe.exec()
+    if (Array.isArray(replies)) {
+      replies.forEach((reply, i) => {
+        if (ops[i] && Array.isArray(reply) && reply[0]) ttlSet.delete(ops[i])
+      })
+    }
   } catch (err) {
-    for (const key of ttlKeys) ttlSet.delete(key)
+    for (const key of ops) if (key) ttlSet.delete(key)
     console.warn('stats: flush failed, dropping', batch.length, 'counters:', err.message)
   }
 }
@@ -304,10 +315,7 @@ async function uniqueUsers(days, availableDays) {
     count(days.slice(-7)),
     count(days),
   ])
-  const daily = []
-  for (const d of days) {
-    daily.push(availableDays.has(d) ? await count([d]) : 0)
-  }
+  const daily = await Promise.all(days.map((d) => (availableDays.has(d) ? count([d]) : 0)))
   return { today, d7, d30, daily }
 }
 
@@ -353,20 +361,36 @@ async function readLibraryShapes(keys) {
   }
 }
 
+function uaBreakdown(counters) {
+  const rows = Object.entries(counters)
+    .filter(([event]) => event.startsWith('ua:'))
+    .map(([event, value]) => [event.slice(3), value])
+  const share = (window) => {
+    const total = rows.reduce((n, [, v]) => n + num(v[window]), 0)
+    const byClient = {}
+    for (const [name, v] of [...rows].sort((a, b) => num(b[1][window]) - num(a[1][window]))) {
+      const count = num(v[window])
+      byClient[name] = { count, pct: total ? Math.round((1000 * count) / total) / 10 : 0 }
+    }
+    return { total, byClient }
+  }
+  return { today: share('today'), d7: share('d7'), d30: share('d30') }
+}
+
 async function buildSummary() {
   const startedAt = Date.now()
   const days = recentDays(STATS_RETENTION_DAYS)
   const hours = recentHours(24)
 
+  const scanned = await Promise.all(KEYSPACE_GROUPS.map((g) => scanKeys(g.match)))
   const groups = {}
   let truncated = false
   let statsKeys = []
-  for (const g of KEYSPACE_GROUPS) {
-    const { keys, truncated: cut } = await scanKeys(g.match)
-    groups[g.name] = keys
-    truncated = truncated || cut
-    if (g.name === 'stats') statsKeys = keys
-  }
+  KEYSPACE_GROUPS.forEach((g, i) => {
+    groups[g.name] = scanned[i].keys
+    truncated = truncated || scanned[i].truncated
+    if (g.name === 'stats') statsKeys = scanned[i].keys
+  })
 
   const counterKeys = statsKeys.filter((k) => k.startsWith(`${NS}:c:`))
   const hourlyKeys = statsKeys.filter((k) => k.startsWith(`${NS}:h:`))
@@ -473,6 +497,7 @@ async function buildSummary() {
       verifiedCached: csKeys.filter((k) => k.startsWith('cs:verified:')).length,
     },
     rateLimit: { trackedIps: rlKeys.length, byBucket: rateLimitIps },
+    userAgents: uaBreakdown(counters),
     counters,
     keyspace: {
       total: dbsize,

@@ -93,6 +93,7 @@ app.use((req, res, next) => {
     const kind = req.statsKind || 'other'
     stats.trackHourly('req')
     stats.track(`req:${kind}`)
+    stats.track(`ua:${uaClass(req)}`)
     stats.track(`status:${Math.floor(res.statusCode / 100)}xx`)
     stats.trackDuration(`req:${kind}`, Date.now() - startedAt)
   })
@@ -345,9 +346,11 @@ function idShape(id) {
 
 const UA_CLASSES = [
   [/stremio/i, 'stremio'],
+  [/nuvio/i, 'nuvio'],
   [/aiostream/i, 'aiostreams'],
   [/^Mozilla\//, 'browser'],
-  [/node|undici|axios|got|okhttp|python|curl|wget|go-http|java|libwww|bot|http/i, 'http-client'],
+  [/okhttp/i, 'okhttp'],
+  [/node|undici|axios|got|python|curl|wget|go-http|java|libwww|bot|http/i, 'http-client'],
 ]
 
 function uaClass(req) {
