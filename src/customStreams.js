@@ -157,17 +157,6 @@ async function listCustomStreams(torboxKey, tmdbKey) {
   }
 }
 
-async function hasCustomStreams(torboxKey, tmdbKey) {
-  if (!redis) return false
-  try {
-    const idx = idxKey(userKeyFor(torboxKey, tmdbKey))
-    return (await redis.zcount(idx, Date.now(), '+inf')) > 0
-  } catch (err) {
-    console.warn('customStreams: hasCustomStreams failed:', err.message)
-    return true
-  }
-}
-
 async function removeCustomStream(torboxKey, tmdbKey, entryId) {
   if (!redis) return false
 
@@ -188,7 +177,6 @@ async function removeCustomStream(torboxKey, tmdbKey, entryId) {
 module.exports = {
   addCustomStream,
   listCustomStreams,
-  hasCustomStreams,
   removeCustomStream,
   isValidImdbId,
   isValidStreamUrl,
