@@ -507,6 +507,66 @@
 
   p.hint strong { color: var(--text-1); font-weight: 600; }
 
+  p.hint code, .section-hint code {
+    font-family: var(--font-mono);
+    font-size: 0.95em;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--bg-raised);
+    color: var(--text-1);
+  }
+
+  .segmented {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    margin-bottom: var(--sp-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-2);
+  }
+
+  .seg {
+    flex: 1;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .seg:hover { color: var(--text-0); }
+  .seg.active { background: var(--bg-raised); color: var(--text-0); }
+  .seg:focus-visible { outline: none; box-shadow: 0 0 0 3px oklch(66% 0.19 var(--hue) / 0.22); }
+
+  .poster-preview {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-top: var(--sp-3);
+  }
+
+  .poster-preview img {
+    width: 120px;
+    height: 180px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+  }
+
+  .poster-preview span {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text-2);
+    line-height: 1.5;
+  }
+
   .warning {
     display: flex;
     gap: var(--sp-3);
@@ -731,18 +791,41 @@
         <div class="section-head">
           <span class="tag">03</span>
           <div>
-            <label for="rpdb">RPDB API Key <span class="badge optional">Optional</span></label>
-            <p class="section-hint">Adds rated poster artwork. <a href="https://ratingposterdb.com/api-key/" target="_blank" rel="noopener">Get a key →</a></p>
+            <label>Poster Artwork <span class="badge optional">Optional</span></label>
+            <p class="section-hint">TMDB posters by default. Swap in RPDB rated posters, or any poster service that takes an IMDb id — one or the other, not both.</p>
           </div>
         </div>
-        <div class="input-wrap">
-          <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-          <input type="password" id="rpdb" placeholder="t0-free-rpdb key" autocomplete="off" spellcheck="false">
-          <button type="button" class="toggle-visibility" data-target="rpdb" aria-label="Show key">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
+
+        <div class="segmented" id="poster-source" role="tablist">
+          <button type="button" class="seg active" data-source="tmdb" role="tab">TMDB</button>
+          <button type="button" class="seg" data-source="rpdb" role="tab">RPDB</button>
+          <button type="button" class="seg" data-source="url" role="tab">Custom URL</button>
         </div>
-        <div class="field-status" id="rpdb-status"></div>
+
+        <div id="poster-pane-rpdb" style="display: none;">
+          <div class="input-wrap">
+            <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            <input type="password" id="rpdb" placeholder="t0-free-rpdb key" autocomplete="off" spellcheck="false">
+            <button type="button" class="toggle-visibility" data-target="rpdb" aria-label="Show key">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <p class="hint">Rated poster artwork from RatingPosterDB. <a href="https://ratingposterdb.com/api-key/" target="_blank" rel="noopener">Get a key →</a></p>
+          <div class="field-status" id="rpdb-status"></div>
+        </div>
+
+        <div id="poster-pane-url" style="display: none;">
+          <div class="input-wrap">
+            <svg class="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <input type="text" id="poster-url" placeholder="https://btttr.cc/poster/imdb/poster-default/{imdb_id}.jpg" autocomplete="off" spellcheck="false">
+          </div>
+          <p class="hint">Any URL containing <code>{imdb_id}</code> — it gets replaced with the title's IMDb id. Applies to every catalogue, including custom streams. Titles with no IMDb id keep their TMDB poster. <a href="https://btttr.cc/configure" target="_blank" rel="noopener">Get a URL →</a></p>
+          <div class="field-status" id="poster-url-status"></div>
+          <div class="poster-preview" id="poster-preview" style="display: none;">
+            <img id="poster-preview-img" alt="Poster preview">
+            <span id="poster-preview-note">Live preview — tt0111161</span>
+          </div>
+        </div>
       </section>
 
       <div class="hr"></div>
@@ -869,8 +952,70 @@ document.querySelectorAll('.toggle-visibility').forEach(btn => {
 
 document.getElementById('no-search').addEventListener('change', () => {
   if (document.getElementById('result').style.display !== 'block') return;
-  const { torbox, tmdb, rpdb } = getConfigValues();
-  buildAndShowLink(torbox, tmdb, rpdb);
+  const { torbox, tmdb, rpdb, posterUrl } = getConfigValues();
+  buildAndShowLink(torbox, tmdb, rpdb, posterUrl);
+});
+
+// --- Poster source ---
+
+const POSTER_TOKEN = '{imdb_id}';
+const POSTER_PREVIEW_IMDB = 'tt0111161';
+let posterSource = 'tmdb';
+
+function selectPosterSource(source) {
+  posterSource = source;
+  document.querySelectorAll('#poster-source .seg').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.source === source);
+  });
+  document.getElementById('poster-pane-rpdb').style.display = source === 'rpdb' ? 'block' : 'none';
+  document.getElementById('poster-pane-url').style.display = source === 'url' ? 'block' : 'none';
+  if (source === 'url') applyPosterPreview();
+}
+
+function previewSrc(pattern) {
+  if (!pattern.includes(POSTER_TOKEN)) return null;
+  try {
+    const url = new URL(pattern.replaceAll(POSTER_TOKEN, POSTER_PREVIEW_IMDB));
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function applyPosterPreview() {
+  const box = document.getElementById('poster-preview');
+  const src = previewSrc(document.getElementById('poster-url').value.trim());
+  if (!src) {
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = 'flex';
+  const img = document.getElementById('poster-preview-img');
+  if (img.src === src) return;
+  const note = document.getElementById('poster-preview-note');
+  note.textContent = `Loading ${POSTER_PREVIEW_IMDB}...`;
+  img.onload = () => { note.textContent = `Live preview — ${POSTER_PREVIEW_IMDB}`; };
+  img.onerror = () => { note.textContent = `Nothing served for ${POSTER_PREVIEW_IMDB} — those titles fall back to TMDB`; };
+  img.src = src;
+}
+
+let posterPreviewTimer = null;
+
+document.getElementById('poster-url').addEventListener('input', () => {
+  setFieldStatus('poster-url', 'idle');
+  clearTimeout(posterPreviewTimer);
+  posterPreviewTimer = setTimeout(applyPosterPreview, 500);
+});
+
+document.querySelectorAll('#poster-source .seg').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    if (posterSource === btn.dataset.source) return;
+    selectPosterSource(btn.dataset.source);
+    document.getElementById('result').style.display = 'none';
+    setFieldStatus('rpdb', 'idle');
+    setFieldStatus('poster-url', 'idle');
+    refreshCustomStreamsSection();
+  });
 });
 
 const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
@@ -898,9 +1043,7 @@ function setFieldStatus(field, state, text) {
 }
 
 async function onGenerateClick() {
-  const torbox = document.getElementById('torbox').value.trim();
-  const tmdb = document.getElementById('tmdb').value.trim();
-  const rpdb = document.getElementById('rpdb').value.trim();
+  const { torbox, tmdb, rpdb, posterUrl } = getConfigValues();
 
   if (!torbox || !tmdb) {
     alert('TorBox and TMDB keys are required.');
@@ -911,6 +1054,7 @@ async function onGenerateClick() {
   setFieldStatus('torbox', 'checking');
   setFieldStatus('tmdb', 'checking');
   if (rpdb) setFieldStatus('rpdb', 'checking'); else setFieldStatus('rpdb', 'idle');
+  if (posterUrl) setFieldStatus('poster-url', 'checking'); else setFieldStatus('poster-url', 'idle');
 
   const btn = document.getElementById('generate-btn');
   btn.disabled = true;
@@ -920,7 +1064,7 @@ async function onGenerateClick() {
     const res = await fetch('/api/validate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null }),
+      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null, poster_url: posterUrl || null }),
     });
 
     // Prefer the server's message (e.g. rate-limit "Too many requests...") over a bare HTTP code.
@@ -935,16 +1079,22 @@ async function onGenerateClick() {
     if (result.rpdb) {
       setFieldStatus('rpdb', result.rpdb.valid ? 'valid' : 'invalid', result.rpdb.detail);
     }
+    if (result.poster) {
+      setFieldStatus('poster-url', result.poster.valid ? 'valid' : 'invalid', result.poster.detail);
+    }
 
-    const allValid = result.torbox.valid && result.tmdb.valid && (!result.rpdb || result.rpdb.valid);
+    const allValid = result.torbox.valid && result.tmdb.valid
+      && (!result.rpdb || result.rpdb.valid)
+      && (!result.poster || result.poster.valid);
     if (allValid) {
-      buildAndShowLink(torbox, tmdb, rpdb);
+      buildAndShowLink(torbox, tmdb, rpdb, posterUrl);
       refreshCustomStreamsSection();
     }
   } catch (err) {
     setFieldStatus('torbox', 'idle');
     setFieldStatus('tmdb', 'idle');
     setFieldStatus('rpdb', 'idle');
+    setFieldStatus('poster-url', 'idle');
     alert(`Could not validate keys: ${err.message}`);
   } finally {
     btn.disabled = false;
@@ -959,9 +1109,10 @@ function toBase64Url(obj) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function buildAndShowLink(torbox, tmdb, rpdb) {
+function buildAndShowLink(torbox, tmdb, rpdb, posterUrl) {
   const payload = { torbox_key: torbox, tmdb_key: tmdb };
   if (rpdb) payload.rpdb_key = rpdb;
+  if (posterUrl) payload.poster_url = posterUrl;
   if (document.getElementById('no-search').checked) payload.no_search = true;
   const config = toBase64Url(payload);
   const manifestUrl = `${location.origin}/${config}/manifest.json`;
@@ -1008,7 +1159,8 @@ function getConfigValues() {
   return {
     torbox: document.getElementById('torbox').value.trim(),
     tmdb: document.getElementById('tmdb').value.trim(),
-    rpdb: document.getElementById('rpdb').value.trim(),
+    rpdb: posterSource === 'rpdb' ? document.getElementById('rpdb').value.trim() : '',
+    posterUrl: posterSource === 'url' ? document.getElementById('poster-url').value.trim() : '',
   };
 }
 
@@ -1108,14 +1260,14 @@ function tickCustomStreamsCountdown() {
 }
 
 async function loadCustomStreams() {
-  const { torbox, tmdb, rpdb } = getConfigValues();
+  const { torbox, tmdb, rpdb, posterUrl } = getConfigValues();
   if (!torbox || !tmdb) return;
 
   try {
     const res = await fetch('/api/custom-streams/list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null }),
+      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null, poster_url: posterUrl || null }),
     });
     const data = await res.json();
     if (data.ok) {
@@ -1136,7 +1288,7 @@ function refreshCustomStreamsSection() {
 }
 
 async function onAddCustomStream() {
-  const { torbox, tmdb, rpdb } = getConfigValues();
+  const { torbox, tmdb } = getConfigValues();
   const imdbId = document.getElementById('cs-imdb').value.trim();
   const type = document.getElementById('cs-type').value;
   const season = document.getElementById('cs-season').value;
@@ -1179,7 +1331,7 @@ async function onAddCustomStream() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null,
+        torbox_key: torbox, tmdb_key: tmdb,
         type, imdb_id: imdbId || null, season: season ? Number(season) : null, episode: episode ? Number(episode) : null,
         stream_url: streamUrl, title: title || null, ttl_seconds: ttlSeconds,
       }),
@@ -1209,12 +1361,12 @@ async function onAddCustomStream() {
 }
 
 async function onRemoveCustomStream(id) {
-  const { torbox, tmdb, rpdb } = getConfigValues();
+  const { torbox, tmdb } = getConfigValues();
   try {
     const res = await fetch('/api/custom-streams/remove', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null, id }),
+      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, id }),
     });
     // Otherwise a failed remove (e.g. rate-limited) silently no-ops and the entry just reappears.
     if (!res.ok) {
@@ -1230,6 +1382,9 @@ async function onRemoveCustomStream(id) {
 document.getElementById('torbox').addEventListener('input', refreshCustomStreamsSection);
 document.getElementById('tmdb').addEventListener('input', refreshCustomStreamsSection);
 document.addEventListener('DOMContentLoaded', refreshCustomStreamsSection);
+
+if (document.getElementById('poster-url').value.trim()) selectPosterSource('url');
+else if (document.getElementById('rpdb').value.trim()) selectPosterSource('rpdb');
 customStreamsTicker = setInterval(tickCustomStreamsCountdown, 30000);
 </script>
 </body>

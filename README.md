@@ -5,6 +5,7 @@ A [Stremio](https://www.stremio.com/) addon that turns your [TorBox](https://tor
 ## Features
 
 - **Library catalog** — your TorBox torrents and web downloads, grouped by title/season/episode and matched against TMDB.
+- **Poster artwork** — TMDB by default, or swap in [RPDB](https://ratingposterdb.com/) rated posters, or any poster service addressable by IMDb id via a URL pattern like `https://btttr.cc/poster/imdb/poster-default/{imdb_id}.jpg`. RPDB and a custom URL are mutually exclusive; the custom URL wins. Applies to every catalogue, custom streams included.
 - **Custom Streams** — add your own IMDb id + direct stream URL; it shows up as a separate "Custom Streams" catalogue in Stremio and self-deletes when its TTL expires. Requires `REDIS_URL`.
 - **Configure page** (`/configure`) — enter your keys, validate them live, and generate a personal install link for Stremio or Nuvio.
 - **Stats dashboard** (`/stats`) — admin-only view of active users, traffic, cache efficiency and library sizes, computed from the Redis keyspace. Requires `ADMIN_SECRET` and `REDIS_URL`.
@@ -31,6 +32,7 @@ Then open `http://localhost:7000/configure`.
 | `TORBOX_API_KEY` | no       | Default TorBox key, used when no per-user key is present in the request URL. Handy for local dev/single-user hosting.                                                                    |
 | `TMDB_API_KEY`   | no       | Default TMDB key, same idea.                                                                                                                                                             |
 | `RPDB_API_KEY`   | no       | Default RatingPosterDB key, same idea.                                                                                                                                                   |
+| `POSTER_URL`     | no       | Default custom poster URL pattern containing `{imdb_id}`, e.g. `https://btttr.cc/poster/imdb/poster-default/{imdb_id}.jpg`. Takes precedence over `RPDB_API_KEY`.                         |
 | `PORT`           | no       | Port to listen on. Defaults to`7000`.                                                                                                                                                  |
 | `BASE_URL`       | no       | Public base URL used to build the manifest's logo URL (e.g.`https://your-domain`). If unset, relative URLs are used.                                                                     |
 | `REDIS_URL`      | no       | Redis connection string. Powers the library cache and is**required** for Custom Streams — without it, custom streams silently no-op and the library is cached in-process instead. |

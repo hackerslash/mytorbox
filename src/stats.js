@@ -11,6 +11,8 @@ const {
   STATS_HOURLY_TTL_SECONDS,
   STATS_TOP_LIBRARIES,
   STATS_LIBRARY_SAMPLE_LIMIT,
+  STATS_UA_SAMPLE_LIMIT,
+  STATS_UA_MAX_LENGTH,
 } = require('./config')
 
 const NS = 'st'
@@ -54,6 +56,10 @@ function usersKey(day) {
   return `${NS}:u:${day}`
 }
 
+function uaSampleKey(day) {
+  return `${NS}:uaraw:${day}`
+}
+
 function firstSeenKey(userHash) {
   return `${NS}:first:${userHash}`
 }
@@ -66,7 +72,7 @@ function userHash(keys) {
   if (!keys || !keys.torboxKey || !keys.tmdbKey) return null
   return crypto
     .createHash('sha256')
-    .update(`${keys.torboxKey}|${keys.tmdbKey}|${keys.rpdbKey || ''}`)
+    .update(`${keys.torboxKey}|${keys.tmdbKey}|`)
     .digest('hex')
 }
 
@@ -95,11 +101,71 @@ function needsTtl(key) {
   return true
 }
 
+function scheduleFlush() {
+  if (flushTimer) return
+  flushTimer = setTimeout(() => { flush() }, STATS_FLUSH_MS)
+  if (flushTimer.unref) flushTimer.unref()
+}
+
 function queue(key, by) {
   pending.set(key, (pending.get(key) || 0) + by)
-  if (!flushTimer) {
-    flushTimer = setTimeout(() => { flush() }, STATS_FLUSH_MS)
-    if (flushTimer.unref) flushTimer.unref()
+  scheduleFlush()
+}
+
+const pendingUa = new Map()
+
+function cleanUa(ua) {
+  return ua.replace(/[^\x20-\x7e]/g, '').replace(/ {2,}/g, ' ').trim().slice(0, STATS_UA_MAX_LENGTH)
+}
+
+function trackUserAgent(ua) {
+  if (!enabled() || typeof ua !== 'string') return
+  const cleaned = cleanUa(ua)
+  if (!cleaned) return
+  if (!pendingUa.has(cleaned) && pendingUa.size >= STATS_UA_SAMPLE_LIMIT) {
+    track('uasample:capped')
+    return
+  }
+  pendingUa.set(cleaned, (pendingUa.get(cleaned) || 0) + 1)
+  scheduleFlush()
+}
+
+async function flushUa() {
+  if (!pendingUa.size) return
+  const batch = [...pendingUa]
+  pendingUa.clear()
+  const key = uaSampleKey(dayId())
+  try {
+    const known = new Set(await redis.hkeys(key))
+    let room = STATS_UA_SAMPLE_LIMIT - known.size
+    let dropped = 0
+    const pipe = redis.pipeline()
+    for (const [ua, by] of batch) {
+      if (!known.has(ua)) {
+        if (room <= 0) {
+          dropped += by
+          continue
+        }
+        room--
+      }
+      pipe.hincrby(key, ua, by)
+    }
+    pipe.expire(key, STATS_TTL_SECONDS)
+    await pipe.exec()
+    if (dropped) track('uasample:capped', dropped)
+  } catch (err) {
+    console.warn('stats: ua sample flush failed:', err.message)
+  }
+}
+
+async function readUaSamples(day) {
+  try {
+    const raw = await redis.hgetall(uaSampleKey(day))
+    return Object.entries(raw || {})
+      .map(([ua, count]) => ({ ua, count: num(count) }))
+      .sort((a, b) => b.count - a.count)
+  } catch {
+    return []
   }
 }
 
@@ -108,10 +174,13 @@ async function flush() {
     clearTimeout(flushTimer)
     flushTimer = null
   }
-  if (!pending.size || !redis) {
+  if (!redis) {
     pending.clear()
+    pendingUa.clear()
     return
   }
+  await flushUa()
+  if (!pending.size) return
   const batch = [...pending]
   pending.clear()
   const pipe = redis.pipeline()
@@ -498,6 +567,7 @@ async function buildSummary() {
     },
     rateLimit: { trackedIps: rlKeys.length, byBucket: rateLimitIps },
     userAgents: uaBreakdown(counters),
+    userAgentSamples: await readUaSamples(dayId()),
     counters,
     keyspace: {
       total: dbsize,
@@ -542,6 +612,7 @@ module.exports = {
   trackHourly,
   trackDuration,
   trackUser,
+  trackUserAgent,
   trackLibraryShape,
   flushNow,
   summary,

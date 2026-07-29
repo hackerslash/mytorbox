@@ -18,12 +18,12 @@ function clampTtlMs(ttlMs) {
   return Math.min(Math.max(ttlMs, CUSTOM_STREAM_MIN_TTL_MS), CUSTOM_STREAM_MAX_TTL_MS)
 }
 
-function materialFor(torboxKey, tmdbKey, rpdbKey) {
-  return `${torboxKey}|${tmdbKey}|${rpdbKey || ''}`
+function materialFor(torboxKey, tmdbKey) {
+  return `${torboxKey}|${tmdbKey}|`
 }
 
-function userKeyFor(torboxKey, tmdbKey, rpdbKey) {
-  return crypto.createHash('sha256').update(materialFor(torboxKey, tmdbKey, rpdbKey)).digest('hex')
+function userKeyFor(torboxKey, tmdbKey) {
+  return crypto.createHash('sha256').update(materialFor(torboxKey, tmdbKey)).digest('hex')
 }
 
 function entryKey(userKey, entryId) {
@@ -63,10 +63,10 @@ function groupKeyFor(imdbId, title) {
   return imdbId || `noimdb-${slugify(title || 'untitled')}`
 }
 
-async function addCustomStream(torboxKey, tmdbKey, rpdbKey, entry) {
+async function addCustomStream(torboxKey, tmdbKey, entry) {
   if (!redis) return null
 
-  const uKey = userKeyFor(torboxKey, tmdbKey, rpdbKey)
+  const uKey = userKeyFor(torboxKey, tmdbKey)
   const idx = idxKey(uKey)
 
   try {
@@ -95,7 +95,7 @@ async function addCustomStream(torboxKey, tmdbKey, rpdbKey, entry) {
       groupKey: groupKeyFor(entry.imdbId, entry.title),
       season: entry.type === 'series' ? entry.season : null,
       episode: entry.type === 'series' ? entry.episode : null,
-      streamUrl: encryptUrl(entry.streamUrl, materialFor(torboxKey, tmdbKey, rpdbKey)),
+      streamUrl: encryptUrl(entry.streamUrl, materialFor(torboxKey, tmdbKey)),
       title: entry.title || null,
       createdAt: now,
       expiresAt,
@@ -116,10 +116,10 @@ async function addCustomStream(torboxKey, tmdbKey, rpdbKey, entry) {
   }
 }
 
-async function listCustomStreams(torboxKey, tmdbKey, rpdbKey) {
+async function listCustomStreams(torboxKey, tmdbKey) {
   if (!redis) return []
 
-  const uKey = userKeyFor(torboxKey, tmdbKey, rpdbKey)
+  const uKey = userKeyFor(torboxKey, tmdbKey)
   const idx = idxKey(uKey)
 
   try {
@@ -131,7 +131,7 @@ async function listCustomStreams(torboxKey, tmdbKey, rpdbKey) {
     const keys = ids.map((id) => entryKey(uKey, id))
     const raw = await redis.mget(...keys)
 
-    const material = materialFor(torboxKey, tmdbKey, rpdbKey)
+    const material = materialFor(torboxKey, tmdbKey)
     const entries = []
     const staleIds = []
     raw.forEach((val, i) => {
@@ -157,10 +157,10 @@ async function listCustomStreams(torboxKey, tmdbKey, rpdbKey) {
   }
 }
 
-async function hasCustomStreams(torboxKey, tmdbKey, rpdbKey) {
+async function hasCustomStreams(torboxKey, tmdbKey) {
   if (!redis) return false
   try {
-    const idx = idxKey(userKeyFor(torboxKey, tmdbKey, rpdbKey))
+    const idx = idxKey(userKeyFor(torboxKey, tmdbKey))
     return (await redis.zcount(idx, Date.now(), '+inf')) > 0
   } catch (err) {
     console.warn('customStreams: hasCustomStreams failed:', err.message)
@@ -168,10 +168,10 @@ async function hasCustomStreams(torboxKey, tmdbKey, rpdbKey) {
   }
 }
 
-async function removeCustomStream(torboxKey, tmdbKey, rpdbKey, entryId) {
+async function removeCustomStream(torboxKey, tmdbKey, entryId) {
   if (!redis) return false
 
-  const uKey = userKeyFor(torboxKey, tmdbKey, rpdbKey)
+  const uKey = userKeyFor(torboxKey, tmdbKey)
   const idx = idxKey(uKey)
 
   try {

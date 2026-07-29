@@ -3,7 +3,7 @@ const zlib = require('zlib')
 const { SOURCES, fetchMylist, fetchNewest, buildStreamUrl } = require('./torbox')
 const { parseWorkItems, slugify, makeGuessResolver } = require('./parser')
 const tmdb = require('./tmdb')
-const rpdb = require('./rpdb')
+const posters = require('./posters')
 const redis = require('./redisClient')
 const stats = require('./stats')
 const {
@@ -39,27 +39,26 @@ function hydrateStreams(entries, torboxKey) {
   }))
 }
 
-function posterUrlFor(tmdbRes, kind, rpdbKey) {
-  if (tmdbRes) {
-    const rp = rpdb.posterUrl(rpdbKey, tmdbRes.id, kind)
-    if (rp) return rp
-  }
+function posterUrlFor(tmdbRes, kind, provider, imdbId = null) {
+  const custom = posters.byImdb(provider, imdbId) || (tmdbRes && posters.byTmdb(provider, tmdbRes.id, kind))
+  if (custom) return custom
   return tmdb.posterUrl(tmdbRes)
 }
 
 const TMDB_ID_IN_ID_RE = /^tb:(?:movie|series):tmdb-(\d+)(?::|$)/
 const IMDB_ID_RE = /^tt\d+$/
 
-function rpdbPosterFor(id, type, rpdbKey) {
-  if (IMDB_ID_RE.test(id)) return rpdb.posterUrlByImdb(rpdbKey, id)
+function providerPosterFor(id, type, provider) {
+  const byImdb = posters.byImdb(provider, id)
+  if (byImdb) return byImdb
   const match = TMDB_ID_IN_ID_RE.exec(id)
-  return match ? rpdb.posterUrl(rpdbKey, match[1], type) : null
+  return match ? posters.byTmdb(provider, match[1], type) : null
 }
 
-function withRpdbPosters(items, rpdbKey) {
-  if (!rpdbKey) return items
+function withPosters(items, provider) {
+  if (!provider) return items
   return items.map((item) => {
-    const poster = rpdbPosterFor(item.id || '', item.type, rpdbKey)
+    const poster = providerPosterFor(item.id || '', item.type, provider)
     return poster ? { ...item, poster } : item
   })
 }
@@ -318,14 +317,16 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
 }
 
 // Falls back to this in-process Map only when Redis isn't configured (e.g. local dev without REDIS_URL).
-const memCache = new Map() // sha256(`${torboxKey}|${tmdbKey}|${rpdbKey}`) -> { record, storedAt }
+const memCache = new Map() // sha256(`${torboxKey}|${tmdbKey}|`) -> { record, storedAt }
 const buildLocks = new Map()
 
 // Redis/memory keys are hashed rather than built from the raw keys directly —
 // otherwise anyone with Redis access could read every user's API keys straight
 // out of the key names (`redis-cli KEYS lib:*`, MONITOR, RDB backups, etc).
-function cacheKeyFor(torboxKey, tmdbKey, rpdbKey) {
-  return crypto.createHash('sha256').update(`${torboxKey}|${tmdbKey}|${rpdbKey || ''}`).digest('hex')
+// The trailing separator keeps this equal to the old `torbox|tmdb|rpdb` hash for users with
+// no RPDB key; dropping it invalidates every cached library.
+function cacheKeyFor(torboxKey, tmdbKey) {
+  return crypto.createHash('sha256').update(`${torboxKey}|${tmdbKey}|`).digest('hex')
 }
 
 const LIBRARY_HARD_TTL_SECONDS = Math.floor(LIBRARY_HARD_TTL_MS / 1000)
@@ -520,8 +521,8 @@ async function probeUnchanged(cacheKey, cached, torboxKey) {
   }
 }
 
-async function getLibrary(torboxKey, tmdbKey, rpdbKey = null, force = false) {
-  const cacheKey = cacheKeyFor(torboxKey, tmdbKey, rpdbKey)
+async function getLibrary(torboxKey, tmdbKey, force = false) {
+  const cacheKey = cacheKeyFor(torboxKey, tmdbKey)
 
   const cached = await getCachedRecord(cacheKey)
   if (!force && cached && cached.lib && Date.now() - cached.validatedAt < LIBRARY_CHECK_INTERVAL_MS) {
@@ -590,4 +591,4 @@ async function clearCache() {
   }
 }
 
-module.exports = { getLibrary, buildLibrary, clearCache, posterUrlFor, withRpdbPosters, mapLimit, hydrateStreams }
+module.exports = { getLibrary, buildLibrary, clearCache, posterUrlFor, withPosters, mapLimit, hydrateStreams }

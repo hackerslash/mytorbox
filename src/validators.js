@@ -1,5 +1,6 @@
 const { TORBOX_BASE, TMDB_BASE, RPDB_BASE } = require('./config')
 const { sleep } = require('./httpUtils')
+const posters = require('./posters')
 
 const RPDB_PROBE_TMDB_ID = 550 // Fight Club — stable, always exists on TMDB
 
@@ -59,4 +60,10 @@ async function checkRpdb(key) {
   return { valid: false, detail: `RPDB returned HTTP ${res.status}` }
 }
 
-module.exports = { checkTorbox, checkTmdb, checkRpdb }
+function checkPosterUrl(url) {
+  if (!url) return null
+  const problem = posters.posterUrlProblem(url)
+  return problem ? { valid: false, detail: problem } : { valid: true, detail: 'OK' }
+}
+
+module.exports = { checkTorbox, checkTmdb, checkRpdb, checkPosterUrl }

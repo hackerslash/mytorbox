@@ -12,8 +12,8 @@ function streamDictFor(entry) {
   }
 }
 
-async function buildCustomCatalog(torboxKey, tmdbKey, rpdbKey) {
-  const entries = await listCustomStreams(torboxKey, tmdbKey, rpdbKey)
+async function buildCustomCatalog(torboxKey, tmdbKey, poster = null) {
+  const entries = await listCustomStreams(torboxKey, tmdbKey)
   const lib = { movies: [], series: [], meta: {}, streams: {} }
   if (!entries.length) return lib
 
@@ -57,6 +57,7 @@ async function buildCustomCatalog(torboxKey, tmdbKey, rpdbKey) {
     const found = movieFinds[i]
     const tmdbRes = found ? found.result : null
     const groupEntries = movieGroups.get(groupKey)
+    const imdbId = groupEntries[0].imdbId
     const mid = `tb:custom:movie:${groupKey}`
     const fallbackTitle = groupEntries.find((e) => e.title) ? groupEntries.find((e) => e.title).title : groupKey
     const name = (tmdbRes && tmdbRes.title) || fallbackTitle
@@ -65,7 +66,7 @@ async function buildCustomCatalog(torboxKey, tmdbKey, rpdbKey) {
       id: mid,
       type: 'movie',
       name,
-      poster: posterUrlFor(tmdbRes, 'movie', rpdbKey),
+      poster: posterUrlFor(tmdbRes, 'movie', poster, imdbId),
     }
     const year = tmdbRes && tmdbRes.release_date ? tmdbRes.release_date.slice(0, 4) : null
     if (year) preview.releaseInfo = String(year)
@@ -96,7 +97,7 @@ async function buildCustomCatalog(torboxKey, tmdbKey, rpdbKey) {
       id: sid,
       type: 'series',
       name,
-      poster: posterUrlFor(tmdbRes, 'series', rpdbKey),
+      poster: posterUrlFor(tmdbRes, 'series', poster, allEntries[0].imdbId),
     }
     const year = tmdbRes && tmdbRes.first_air_date ? tmdbRes.first_air_date.slice(0, 4) : null
     if (year) preview.releaseInfo = String(year)

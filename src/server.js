@@ -8,6 +8,7 @@ const validators = require('./validators')
 const library = require('./library')
 const tmdb = require('./tmdb')
 const customStreams = require('./customStreams')
+const posters = require('./posters')
 const config = require('./config')
 const stats = require('./stats')
 const { rateLimit } = require('./rateLimit')
@@ -26,11 +27,12 @@ function escapeHtml(str) {
   return str.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
 
-function configurePage(torboxKey = '', tmdbKey = '', rpdbKey = '', noSearch = false) {
+function configurePage(torboxKey = '', tmdbKey = '', rpdbKey = '', noSearch = false, posterUrl = '') {
   let page = CONFIGURE_HTML.replace(/__LOGO_VERSION__/g, String(logoVersion()))
   page = page.replace('id="torbox" placeholder', `id="torbox" value="${escapeHtml(torboxKey)}" placeholder`)
   page = page.replace('id="tmdb" placeholder', `id="tmdb" value="${escapeHtml(tmdbKey)}" placeholder`)
   page = page.replace('id="rpdb" placeholder', `id="rpdb" value="${escapeHtml(rpdbKey)}" placeholder`)
+  page = page.replace('id="poster-url" placeholder', `id="poster-url" value="${escapeHtml(posterUrl)}" placeholder`)
   if (noSearch) page = page.replace('type="checkbox" id="no-search"', 'type="checkbox" id="no-search" checked')
   return page
 }
@@ -91,9 +93,11 @@ app.use((req, res, next) => {
   const startedAt = Date.now()
   res.on('finish', () => {
     const kind = req.statsKind || 'other'
+    const ua = uaClass(req)
     stats.trackHourly('req')
     stats.track(`req:${kind}`)
-    stats.track(`ua:${uaClass(req)}`)
+    stats.track(`ua:${ua}`)
+    if (UNNAMED_UA.has(ua)) stats.trackUserAgent(req.get('user-agent'))
     stats.track(`status:${Math.floor(res.statusCode / 100)}xx`)
     stats.trackDuration(`req:${kind}`, Date.now() - startedAt)
   })
@@ -120,22 +124,30 @@ app.get('/:config/configure', (req, res) => {
     return
   }
   res.type('html').send(
-    configurePage(cfg.torbox_key || '', cfg.tmdb_key || '', cfg.rpdb_key || '', Boolean(cfg.no_search))
+    configurePage(
+      cfg.torbox_key || '',
+      cfg.tmdb_key || '',
+      cfg.rpdb_key || '',
+      Boolean(cfg.no_search),
+      typeof cfg.poster_url === 'string' ? cfg.poster_url : ''
+    )
   )
 })
 
 app.post('/api/validate', kind('validate'), rateLimit('validate', RATE_LIMITS.validate), async (req, res) => {
-  const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey } = req.body || {}
+  const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey, poster_url: posterUrl } = req.body || {}
+  const poster = validators.checkPosterUrl(posterUrl)
   const [torbox, tmdb, rpdb] = await Promise.all([
     validators.checkTorbox(torboxKey),
     validators.checkTmdb(tmdbKey),
-    validators.checkRpdb(rpdbKey),
+    poster && poster.valid ? null : validators.checkRpdb(rpdbKey),
   ])
   stats.track(`validate:torbox:${torbox.valid ? 'ok' : 'fail'}`)
   stats.track(`validate:tmdb:${tmdb.valid ? 'ok' : 'fail'}`)
   if (rpdb) stats.track(`validate:rpdb:${rpdb.valid ? 'ok' : 'fail'}`)
-  if (torbox.valid && tmdb.valid) stats.trackUser({ torboxKey, tmdbKey, rpdbKey: rpdbKey || null })
-  res.json({ torbox, tmdb, rpdb })
+  if (poster) stats.track(`validate:poster:${poster.valid ? 'ok' : 'fail'}`)
+  if (torbox.valid && tmdb.valid) stats.trackUser({ torboxKey, tmdbKey })
+  res.json({ torbox, tmdb, rpdb, poster })
 })
 
 app.post('/api/cache/clear', kind('admin'), rateLimit('cacheClear', RATE_LIMITS.cacheClear), requireAdmin, async (req, res) => {
@@ -182,28 +194,29 @@ function toPublicEntry(e) {
   }
 }
 
-async function enrichEntry(e, tmdbKey, rpdbKey) {
+async function enrichEntry(e, tmdbKey, provider) {
   const found = e.imdbId ? await tmdb.findByImdbId(e.imdbId, tmdbKey).catch(() => null) : null
   const tmdbRes = found ? found.result : null
   const name = (tmdbRes && (tmdbRes.title || tmdbRes.name)) || e.title || e.imdbId
-  const poster = library.posterUrlFor(tmdbRes, e.type, rpdbKey)
+  const poster = library.posterUrlFor(tmdbRes, e.type, provider, e.imdbId)
   return { ...toPublicEntry(e), name, poster }
 }
 
 app.post('/api/custom-streams/list', kind('custom:list'), rateLimit('customStreamRead', RATE_LIMITS.customStreamRead), async (req, res) => {
-  const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey } = req.body || {}
+  const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey, poster_url: posterUrl } = req.body || {}
   if (!torboxKey || !tmdbKey) {
     return res.status(400).json({ ok: false, error: 'torbox_key and tmdb_key are required' })
   }
-  stats.trackUser({ torboxKey, tmdbKey, rpdbKey: rpdbKey || null })
-  const entries = await customStreams.listCustomStreams(torboxKey, tmdbKey, rpdbKey || null)
-  const enriched = await Promise.all(entries.map((e) => enrichEntry(e, tmdbKey, rpdbKey || null)))
+  stats.trackUser({ torboxKey, tmdbKey })
+  const provider = posters.resolveProvider(posterUrl, rpdbKey)
+  const entries = await customStreams.listCustomStreams(torboxKey, tmdbKey)
+  const enriched = await Promise.all(entries.map((e) => enrichEntry(e, tmdbKey, provider)))
   res.json({ ok: true, entries: enriched })
 })
 
 app.post('/api/custom-streams/add', kind('custom:add'), rateLimit('customStreamWrite', RATE_LIMITS.customStreamWrite), async (req, res) => {
   const {
-    torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey,
+    torbox_key: torboxKey, tmdb_key: tmdbKey,
     type, imdb_id: imdbId, season, episode, stream_url: streamUrl, title, ttl_seconds: ttlSeconds,
   } = req.body || {}
 
@@ -248,7 +261,7 @@ app.post('/api/custom-streams/add', kind('custom:add'), rateLimit('customStreamW
     ttlMs = ttlSecondsNum * 1000
   }
 
-  const entry = await customStreams.addCustomStream(torboxKey, tmdbKey, rpdbKey || null, {
+  const entry = await customStreams.addCustomStream(torboxKey, tmdbKey, {
     type, imdbId: imdbId || null, season: seasonNum, episode: episodeNum, streamUrl, title: trimmedTitle || null, ttlMs,
   })
   if (!entry) {
@@ -258,11 +271,11 @@ app.post('/api/custom-streams/add', kind('custom:add'), rateLimit('customStreamW
 })
 
 app.post('/api/custom-streams/remove', kind('custom:remove'), rateLimit('customStreamRead', RATE_LIMITS.customStreamRead), async (req, res) => {
-  const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey, id } = req.body || {}
+  const { torbox_key: torboxKey, tmdb_key: tmdbKey, id } = req.body || {}
   if (!torboxKey || !tmdbKey || !id) {
     return res.status(400).json({ ok: false, error: 'torbox_key, tmdb_key, and id are required' })
   }
-  const removed = await customStreams.removeCustomStream(torboxKey, tmdbKey, rpdbKey || null, id)
+  const removed = await customStreams.removeCustomStream(torboxKey, tmdbKey, id)
   if (!removed) {
     return res.status(404).json({ ok: false, error: 'Entry not found or already expired' })
   }
@@ -359,6 +372,8 @@ function uaClass(req) {
   const match = UA_CLASSES.find(([re]) => re.test(ua))
   return match ? match[1] : 'other'
 }
+
+const UNNAMED_UA = new Set(['other', 'okhttp', 'http-client', 'browser'])
 
 async function manifestHandler(req, res) {
   req.statsKind = 'manifest'

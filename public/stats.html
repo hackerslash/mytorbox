@@ -350,6 +350,12 @@
   td { border-bottom: 1px solid oklch(38% 0.03 var(--hue) / 0.18); color: var(--text-1); font-variant-numeric: tabular-nums; }
   td.name { color: var(--text-0); font-family: var(--font-mono); font-size: var(--fs-xs); }
   td.strong { color: var(--text-0); font-weight: 600; }
+  td .mono {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-1);
+    overflow-wrap: anywhere;
+  }
   tbody tr:hover td { background: oklch(19.5% 0.024 var(--hue) / 0.5); }
   tbody tr:last-child td { border-bottom: none; }
 
@@ -833,6 +839,40 @@
       '</div>'
   }
 
+  var UA_LABELS = {
+    stremio: 'Stremio', nuvio: 'Nuvio', aiostreams: 'AIOStreams', browser: 'Browser',
+    okhttp: 'okhttp (Android)', 'http-client': 'HTTP client', other: 'Unrecognised', none: 'No User-Agent',
+  };
+
+  function renderClients(p) {
+    var ua = p.userAgents || {};
+    var today = (ua.today || {}).byClient || {};
+    var d7 = (ua.d7 || {}).byClient || {};
+    var d30 = (ua.d30 || {}).byClient || {};
+    var rows = Object.keys(d30).map(function (name) {
+      return [
+        UA_LABELS[name] || esc(name),
+        n((today[name] || {}).count),
+        n((d7[name] || {}).count),
+        '<span class="strong">' + n(d30[name].count) + '</span>',
+        d30[name].pct + '%',
+      ];
+    });
+
+    var samples = p.userAgentSamples || [];
+    var sampleRows = samples.map(function (s) {
+      return ['<span class="mono">' + esc(s.ua) + '</span>', '<span class="strong">' + n(s.count) + '</span>'];
+    });
+
+    return '<div class="grid cols-2" style="margin-top:var(--sp-3)">' +
+      card('13', 'c-violet', 'Clients', n((ua.d30 || {}).total) + ' requests in 30d',
+        table(['Client', 'Today', '7d', '30d', 'Share'], rows, 'No user agents recorded yet.')) +
+      card('14', 'c-amber', 'Unrecognised user agents', 'today · distinct strings',
+        table(['User-Agent', 'Requests'], sampleRows,
+          'Nothing sampled today — every request matched a named client.')) +
+      '</div>';
+  }
+
   function renderAllCounters(p) {
     var events = Object.keys(p.counters || {}).sort(function (a, b) {
       return c(p, b) - c(p, a) || a.localeCompare(b)
@@ -856,7 +896,7 @@
       '</div>' +
       table(['Event', 'Today', '7d', '30d', 'Avg'], rows, 'No counters recorded yet.')
     return '<div style="margin-top:var(--sp-3)">' +
-      card('13', 'c-blue', 'All counters', filtered.length + ' / ' + events.length + ' events', inner) +
+      card('15', 'c-blue', 'All counters', filtered.length + ' / ' + events.length + ' events', inner) +
       '</div>'
   }
 
@@ -908,6 +948,7 @@
       renderLibraries(p) +
       renderCache(p) +
       renderCustomAndKeyspace(p) +
+      renderClients(p) +
       renderAllCounters(p)
     bindFilter()
   }
