@@ -1,5 +1,6 @@
 const tmdb = require('./tmdb')
-const { posterUrlFor, mapLimit } = require('./library')
+const { posterUrlFor, extraFields, seriesReleaseInfo } = require('./library')
+const { mapLimit } = require('./concurrency')
 const { listCustomStreams } = require('./customStreams')
 
 const TMDB_CONCURRENCY = 5
@@ -62,15 +63,17 @@ async function buildCustomCatalog(torboxKey, tmdbKey, poster = null) {
     const fallbackTitle = groupEntries.find((e) => e.title) ? groupEntries.find((e) => e.title).title : groupKey
     const name = (tmdbRes && tmdbRes.title) || fallbackTitle
 
+    const details = movieDetails[i] || {}
     const preview = {
       id: mid,
       type: 'movie',
       name,
       poster: posterUrlFor(tmdbRes, 'movie', poster, imdbId),
+      ...extraFields(details),
     }
     const year = tmdbRes && tmdbRes.release_date ? tmdbRes.release_date.slice(0, 4) : null
     if (year) preview.releaseInfo = String(year)
-    const logo = tmdb.logoUrl(movieDetails[i] && movieDetails[i].images, tmdbRes && tmdbRes.original_language)
+    const logo = details.logo
     if (logo) preview.logo = logo
 
     lib.movies.push(preview)
@@ -93,15 +96,18 @@ async function buildCustomCatalog(torboxKey, tmdbKey, poster = null) {
     const fallbackTitle = allEntries.find((e) => e.title) ? allEntries.find((e) => e.title).title : groupKey
     const name = (tmdbRes && tmdbRes.name) || fallbackTitle
 
+    const details = seriesDetails[i] || {}
     const preview = {
       id: sid,
       type: 'series',
       name,
       poster: posterUrlFor(tmdbRes, 'series', poster, allEntries[0].imdbId),
+      ...extraFields(details),
     }
     const year = tmdbRes && tmdbRes.first_air_date ? tmdbRes.first_air_date.slice(0, 4) : null
-    if (year) preview.releaseInfo = String(year)
-    const logo = tmdb.logoUrl(seriesDetails[i] && seriesDetails[i].images, tmdbRes && tmdbRes.original_language)
+    const releaseInfo = seriesReleaseInfo(year, details)
+    if (releaseInfo) preview.releaseInfo = releaseInfo
+    const logo = details.logo
     if (logo) preview.logo = logo
 
     const videos = []

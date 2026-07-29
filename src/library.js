@@ -6,6 +6,8 @@ const tmdb = require('./tmdb')
 const posters = require('./posters')
 const redis = require('./redisClient')
 const stats = require('./stats')
+const { mapLimit } = require('./concurrency')
+const cinemeta = require('./cinemeta')
 const {
   LIBRARY_CHECK_INTERVAL_MS,
   LIBRARY_PROBE_INTERVAL_MS,
@@ -15,6 +17,7 @@ const {
 } = require('./config')
 
 const TMDB_CONCURRENCY = 20
+const CINEMETA_SEARCH_CONCURRENCY = 5
 
 // Cached streams keep only what's needed to rebuild the download URL later —
 // never the raw TorBox key, since this object is what gets persisted to Redis.
@@ -48,6 +51,22 @@ function posterUrlFor(tmdbRes, kind, provider, imdbId = null) {
 const TMDB_ID_IN_ID_RE = /^tb:(?:movie|series):tmdb-(\d+)(?::|$)/
 const IMDB_ID_RE = /^tt\d+$/
 
+function extraFields(details) {
+  const extras = {}
+  if (details.background) extras.background = details.background
+  if (details.landscapePoster) extras.landscapePoster = details.landscapePoster
+  if (details.genres && details.genres.length) extras.genres = details.genres
+  if (details.runtime) extras.runtime = details.runtime
+  return extras
+}
+
+function seriesReleaseInfo(startYear, details) {
+  if (!startYear) return null
+  if (details.inProduction) return `${startYear}-`
+  if (details.endYear && details.endYear !== String(startYear)) return `${startYear}-${details.endYear}`
+  return String(startYear)
+}
+
 function providerPosterFor(id, type, provider) {
   const byImdb = posters.byImdb(provider, id)
   if (byImdb) return byImdb
@@ -61,19 +80,6 @@ function withPosters(items, provider) {
     const poster = providerPosterFor(item.id || '', item.type, provider)
     return poster ? { ...item, poster } : item
   })
-}
-
-async function mapLimit(items, limit, fn) {
-  const results = new Array(items.length)
-  let next = 0
-  async function worker() {
-    while (next < items.length) {
-      const i = next++
-      results[i] = await fn(items[i], i)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return results
 }
 
 async function fetchDetails(kind, results, tmdbKey) {
@@ -182,6 +188,40 @@ function fingerprintEntries(entriesBySource) {
   return `${parts.length}:${crypto.createHash('sha1').update(parts.join('|')).digest('hex')}`
 }
 
+async function resolveGroups(keysAndGroups, kind, tmdbKey) {
+  const results = await mapLimit(keysAndGroups, TMDB_CONCURRENCY, ([, g]) =>
+    tmdb.search(g.title, g.year, kind, tmdbKey)
+  )
+  const details = await fetchDetails(kind, results, tmdbKey)
+
+  const unresolved = []
+  results.forEach((res, i) => {
+    if (!res || !(detailsOf(details, res) || {}).imdbId) unresolved.push(i)
+  })
+  if (!unresolved.length) return { results, details }
+
+  const cinemetaType = kind === 'movie' ? 'movie' : 'series'
+  const recovered = await mapLimit(unresolved, CINEMETA_SEARCH_CONCURRENCY, async (i) => {
+    const g = keysAndGroups[i][1]
+    const imdbId = await cinemeta.searchImdbId(g.title, g.year, cinemetaType)
+    if (!imdbId) return null
+    const found = await tmdb.findByImdbId(imdbId, tmdbKey)
+    return found && found.kind === kind ? found.result : null
+  })
+
+  const added = []
+  unresolved.forEach((i, n) => {
+    if (!recovered[n]) return
+    results[i] = recovered[n]
+    added.push(recovered[n])
+    stats.track(`lib:recovered:${kind}`)
+  })
+  if (added.length) {
+    for (const [id, value] of await fetchDetails(kind, added, tmdbKey)) details.set(id, value)
+  }
+  return { results, details }
+}
+
 async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey = null) {
   const bySource = entriesBySource || (await fetchEntriesBySource(torboxKey))
 
@@ -227,15 +267,8 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
   const movieKeys = [...movieGroups.entries()]
   const seriesKeys = [...seriesGroups.entries()]
 
-  const movieResults = await mapLimit(movieKeys, TMDB_CONCURRENCY, ([, g]) =>
-    tmdb.search(g.title, g.year, 'movie', tmdbKey)
-  )
-  const seriesResults = await mapLimit(seriesKeys, TMDB_CONCURRENCY, ([, g]) =>
-    tmdb.search(g.title, g.year, 'tv', tmdbKey)
-  )
-
-  const movieDetails = await fetchDetails('movie', movieResults, tmdbKey)
-  const seriesDetails = await fetchDetails('tv', seriesResults, tmdbKey)
+  const { results: movieResults, details: movieDetails } = await resolveGroups(movieKeys, 'movie', tmdbKey)
+  const { results: seriesResults, details: seriesDetails } = await resolveGroups(seriesKeys, 'tv', tmdbKey)
 
   const movieImdbIds = movieResults.map((res) => (detailsOf(movieDetails, res) || {}).imdbId || null)
   const seriesImdbIds = seriesResults.map((res) => (detailsOf(seriesDetails, res) || {}).imdbId || null)
@@ -247,15 +280,17 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
 
   moviesMerged.forEach(([canonical, g, tmdbRes]) => {
     const mid = catalogIdFor('movie', canonical)
+    const details = detailsOf(movieDetails, tmdbRes) || {}
     const year = g.year || (tmdbRes && tmdbRes.release_date ? tmdbRes.release_date.slice(0, 4) : null)
     const preview = {
       id: mid,
       type: 'movie',
       name: (tmdbRes && tmdbRes.title) || g.title,
       poster: tmdb.posterUrl(tmdbRes),
+      ...extraFields(details),
     }
     if (year) preview.releaseInfo = String(year)
-    const logo = tmdb.logoUrl((detailsOf(movieDetails, tmdbRes) || {}).images, tmdbRes && tmdbRes.original_language)
+    const logo = details.logo
     if (logo) preview.logo = logo
     lib.movies.push(preview)
     lib.meta[mid] = { ...preview, description: tmdbRes ? tmdbRes.overview : null }
@@ -264,15 +299,18 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
 
   seriesMerged.forEach(([canonical, g, tmdbRes]) => {
     const sid = catalogIdFor('series', canonical)
+    const details = detailsOf(seriesDetails, tmdbRes) || {}
     const year = g.year || (tmdbRes && tmdbRes.first_air_date ? tmdbRes.first_air_date.slice(0, 4) : null)
     const preview = {
       id: sid,
       type: 'series',
       name: (tmdbRes && tmdbRes.name) || g.title,
       poster: tmdb.posterUrl(tmdbRes),
+      ...extraFields(details),
     }
-    if (year) preview.releaseInfo = String(year)
-    const logo = tmdb.logoUrl((detailsOf(seriesDetails, tmdbRes) || {}).images, tmdbRes && tmdbRes.original_language)
+    const releaseInfo = seriesReleaseInfo(year, details)
+    if (releaseInfo) preview.releaseInfo = releaseInfo
+    const logo = details.logo
     if (logo) preview.logo = logo
 
     const specialTitles = new Map()
@@ -581,6 +619,8 @@ async function clearCache() {
         ...(await redis.keys('libp:*')),
         ...(await redis.keys('pc:*')),
         ...(await redis.keys('tmdb:*')),
+        ...(await redis.keys('cm:*')),
+        ...(await redis.keys('cms:*')),
       ]
       for (let i = 0; i < all.length; i += 500) {
         await redis.del(...all.slice(i, i + 500))
@@ -591,4 +631,13 @@ async function clearCache() {
   }
 }
 
-module.exports = { getLibrary, buildLibrary, clearCache, posterUrlFor, withPosters, mapLimit, hydrateStreams }
+module.exports = {
+  getLibrary,
+  buildLibrary,
+  clearCache,
+  posterUrlFor,
+  withPosters,
+  hydrateStreams,
+  extraFields,
+  seriesReleaseInfo,
+}

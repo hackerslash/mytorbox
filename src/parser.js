@@ -13,6 +13,44 @@ const BRACKET_SITE_PREFIX_RE = /^\[\s*[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\s*\
 // RiffTrax comedy-commentary releases prepend their own brand before the real movie title.
 const RIFFTRAX_PREFIX_RE = /^rifftrax\s*[-–—:]\s*/i
 
+const JUNK_FILE_PATTERNS = [
+  /[-_]TLR-\d/i,
+  /(?:^|[\s._-])sample(?:[\s._-]|\d|$)/i,
+  /^\[AMV\]/i,
+  /(?:^|[\s._-])(?:CM|PV|NCOP|NCED|SPDVD|Logo)[\s._-]+(?:RL[\s._-]+)?-[\s._-]*\d/i,
+  /(?:^|[\s._-])animatic(?:[\s._-]|$)/i,
+]
+
+function isJunkFile(name) {
+  return JUNK_FILE_PATTERNS.some((re) => re.test(name))
+}
+
+const AUDIO_CHANNELS_RE =
+  /\b(DDP?|EAC3|AC3|DTS(?:[-.]?HD)?(?:[-.]?MA)?|TrueHD|THD|AAC|FLAC|LPCM|Opus|Atmos)[\s._-]*[2567][01]\b/gi
+const GLUED_RESOLUTION_RE = /\b(4k|uhd)[a-z]*?(?:2160|1080)\b/gi
+
+function stripTechnicalTokens(name) {
+  return name.replace(AUDIO_CHANNELS_RE, '$1').replace(GLUED_RESOLUTION_RE, '$1')
+}
+
+const EPISODE_MARKER_RE =
+  /(?:s\d{1,2}[\s._-]*e(?:p|pisode)?[\s._-]?\d{1,3}|\bs\d{1,2}\b|\be(?:p|pisode)?[\s._-]?\d{1,4}\b|\b\d{1,2}x\d{1,3}\b)/i
+
+const SEASON_SUFFIX_RE =
+  /^(.*?)[\s._-]+(?:(\d{1,2})(?:st|nd|rd|th)?[\s._-]+season|season[\s._-]+(\d{1,2})|(\d{1,2})(?:st|nd|rd|th))$/i
+const FINAL_ARC_SUFFIX_RE = /^(.*?)[\s._-]+(?:kanketsu-hen|final[\s._-]+season)$/i
+
+function splitSeasonSuffix(title) {
+  const seasonMatch = SEASON_SUFFIX_RE.exec(title)
+  if (seasonMatch) {
+    const season = Number.parseInt(seasonMatch[2] || seasonMatch[3] || seasonMatch[4], 10)
+    if (Number.isInteger(season)) return { title: seasonMatch[1].trim(), season }
+  }
+  const arcMatch = FINAL_ARC_SUFFIX_RE.exec(title)
+  if (arcMatch) return { title: arcMatch[1].trim(), season: null }
+  return { title, season: null }
+}
+
 function stripJunkPrefixes(name) {
   let cleaned = name
   let changed = true
@@ -99,13 +137,15 @@ function* parseWorkItems(source, entry, resolver = DIRECT_RESOLVER) {
   for (const f of entry.files || []) {
     const name = f.short_name || f.name || ''
     if (!isVideo(name)) continue
+    if (isJunkFile(name)) continue
 
-    const cleanedName = stripJunkPrefixes(name)
+    const cleanedName = stripTechnicalTokens(stripJunkPrefixes(name))
     const guess = resolver.resolve(cleanedName)
 
     let title = fixTruncatedNumericTitle(cleanedName, titleToString(guess.title))
     let year = guess.year || null
     let isEpisode = guess.type === 'episode'
+    let explicitSeason = isEpisode ? guess.season ?? null : null
     let season = isEpisode ? guess.season || 1 : null
     let episode = isEpisode ? guess.episode ?? guess.absolute_episode ?? null : null
     if (isEpisode && episode == null) episode = dashEpisode(cleanedName, guess.season)
@@ -115,7 +155,21 @@ function* parseWorkItems(source, entry, resolver = DIRECT_RESOLVER) {
       if (entryGuess === undefined) entryGuess = resolver.resolve(stripJunkPrefixes(entry.name))
       title = fixTruncatedNumericTitle(entry.name, titleToString(entryGuess.title))
       year = year || entryGuess.year || null
-      if (isEpisode) season = season || entryGuess.season || 1
+      if (isEpisode) {
+        explicitSeason = explicitSeason ?? entryGuess.season ?? null
+        season = season || entryGuess.season || 1
+      }
+    }
+
+    if (isEpisode && episode == null && explicitSeason == null && !EPISODE_MARKER_RE.test(cleanedName)) {
+      isEpisode = false
+      season = null
+    }
+
+    if (isEpisode) {
+      const split = splitSeasonSuffix(title)
+      title = split.title
+      if (split.season != null) season = split.season
     }
 
     if (!title) title = titleFromFilename(name)

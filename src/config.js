@@ -11,6 +11,7 @@ const PORT = parseInt(process.env.PORT || '7000', 10)
 const TORBOX_BASE = 'https://api.torbox.app/v1/api'
 const TMDB_BASE = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500'
+const TMDB_BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280'
 const RPDB_BASE = 'https://api.ratingposterdb.com'
 
 const LIBRARY_CHECK_INTERVAL_MS = 60 * 60 * 1000
@@ -30,6 +31,12 @@ const TORBOX_MAX_PAGES = 50
 // A genuine "no TMDB match" (or a transient error) is cached only briefly so newly
 // added TMDB entries appear soon, unlike successful lookups which are stable.
 const TMDB_NEGATIVE_CACHE_TTL_SECONDS = 6 * 60 * 60
+const CINEMETA_BASE = 'https://v3-cinemeta.strem.io'
+const CINEMETA_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
+const CINEMETA_NEGATIVE_CACHE_TTL_SECONDS = 6 * 60 * 60
+const CINEMETA_WARM_CONCURRENCY = 8
+const CINEMETA_WARM_MAX_PER_RUN = 120
+const CINEMETA_MAX_TITLE_EDITS = 3
 // Skip caching values larger than this — keeps writes safely under the hosted-Redis
 // (Upstash) per-request size ceiling. Library blobs are gzipped, so this is generous.
 const MAX_CACHE_VALUE_BYTES = 900 * 1024
@@ -83,6 +90,7 @@ module.exports = {
   TORBOX_BASE,
   TMDB_BASE,
   TMDB_IMAGE_BASE,
+  TMDB_BACKDROP_BASE,
   RPDB_BASE,
   LIBRARY_CHECK_INTERVAL_MS,
   LIBRARY_PROBE_INTERVAL_MS,
@@ -90,6 +98,12 @@ module.exports = {
   PARSE_CACHE_TTL_SECONDS,
   TMDB_CACHE_TTL_SECONDS,
   TMDB_NEGATIVE_CACHE_TTL_SECONDS,
+  CINEMETA_BASE,
+  CINEMETA_CACHE_TTL_SECONDS,
+  CINEMETA_NEGATIVE_CACHE_TTL_SECONDS,
+  CINEMETA_WARM_CONCURRENCY,
+  CINEMETA_WARM_MAX_PER_RUN,
+  CINEMETA_MAX_TITLE_EDITS,
   TORBOX_PAGE_LIMIT,
   TORBOX_MAX_PAGES,
   MAX_CACHE_VALUE_BYTES,

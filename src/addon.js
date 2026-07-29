@@ -3,6 +3,7 @@ const { getLibrary, hydrateStreams, withPosters } = require('./library')
 const posters = require('./posters')
 const { buildCustomCatalog } = require('./customCatalog')
 const customStreams = require('./customStreams')
+const cinemeta = require('./cinemeta')
 
 const HAS_DEFAULTS = Boolean(config.DEFAULT_TORBOX_API_KEY && config.DEFAULT_TMDB_API_KEY)
 
@@ -139,17 +140,21 @@ async function getCatalog({ type, id, config: cfg, extra }) {
 
   if (id === CUSTOM_MOVIES_CATALOG_ID || id === CUSTOM_SERIES_CATALOG_ID) {
     const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.poster)
-    if (type === 'movie' && id === CUSTOM_MOVIES_CATALOG_ID) return { metas: selectMetas(custom.movies, extra) }
-    if (type === 'series' && id === CUSTOM_SERIES_CATALOG_ID) return { metas: selectMetas(custom.series, extra) }
+    if (type === 'movie' && id === CUSTOM_MOVIES_CATALOG_ID) {
+      return { metas: await cinemeta.withEnrichment(selectMetas(custom.movies, extra)) }
+    }
+    if (type === 'series' && id === CUSTOM_SERIES_CATALOG_ID) {
+      return { metas: await cinemeta.withEnrichment(selectMetas(custom.series, extra)) }
+    }
     return { metas: [] }
   }
 
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey)
   if (type === 'movie' && id === 'torbox-movies') {
-    return { metas: withPosters(selectMetas(lib.movies, extra), keys.poster) }
+    return { metas: await cinemeta.withEnrichment(withPosters(selectMetas(lib.movies, extra), keys.poster)) }
   }
   if (type === 'series' && id === 'torbox-series') {
-    return { metas: withPosters(selectMetas(lib.series, extra), keys.poster) }
+    return { metas: await cinemeta.withEnrichment(withPosters(selectMetas(lib.series, extra), keys.poster)) }
   }
   return { metas: [] }
 }
@@ -161,14 +166,16 @@ async function getMeta({ type, id, config: cfg }) {
   if (id.startsWith('tb:custom:')) {
     const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.poster)
     const item = custom.meta[id]
-    if (item && item.type === type) return { meta: item }
+    if (item && item.type === type) return { meta: (await cinemeta.withEnrichment([item]))[0] }
     if (id.startsWith(`tb:custom:${type}:`)) return { meta: placeholderMeta(id, type, ...EXPIRED_CUSTOM) }
     return null
   }
 
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey)
   const item = lib.meta[id]
-  if (item && item.type === type) return { meta: withPosters([item], keys.poster)[0] }
+  if (item && item.type === type) {
+    return { meta: (await cinemeta.withEnrichment(withPosters([item], keys.poster)))[0] }
+  }
   if (id.startsWith(`tb:${type}:`)) return { meta: placeholderMeta(id, type, ...OUTDATED_ITEM) }
   return null
 }
