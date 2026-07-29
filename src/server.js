@@ -96,7 +96,7 @@ app.use((req, res, next) => {
     const ua = uaClass(req)
     stats.trackHourly('req')
     stats.track(`req:${kind}`)
-    stats.track(`ua:${ua}`)
+    stats.track(`ua:${clientClass(req, ua)}`)
     if (UNNAMED_UA.has(ua)) stats.trackUserAgent(req.get('user-agent'))
     stats.track(`status:${Math.floor(res.statusCode / 100)}xx`)
     stats.trackDuration(`req:${kind}`, Date.now() - startedAt)
@@ -366,6 +366,13 @@ const UA_CLASSES = [
   [/node|undici|axios|got|python|curl|wget|go-http|java|libwww|bot|http/i, 'http-client'],
 ]
 
+const REFERER_CLASSES = [
+  [/^https?:\/\/([a-z0-9-]+\.)*stremio\.com(\/|$)/i, 'stremio-web'],
+  [/^https?:\/\/([a-z0-9-]+\.)*nuvio\.tv(\/|$)/i, 'nuvio-web'],
+]
+
+const GENERIC_UA = new Set(['browser', 'other'])
+
 function uaClass(req) {
   const ua = req.get('user-agent')
   if (!ua) return 'none'
@@ -373,7 +380,14 @@ function uaClass(req) {
   return match ? match[1] : 'other'
 }
 
-const UNNAMED_UA = new Set(['other', 'okhttp', 'http-client', 'browser'])
+function clientClass(req, ua) {
+  if (!GENERIC_UA.has(ua)) return ua
+  const referer = req.get('referer')
+  const match = referer && REFERER_CLASSES.find(([re]) => re.test(referer))
+  return match ? match[1] : ua
+}
+
+const UNNAMED_UA = new Set(['other', 'okhttp', 'http-client'])
 
 async function manifestHandler(req, res) {
   req.statsKind = 'manifest'
@@ -439,7 +453,7 @@ async function metaHandler(req, res) {
       const keys = addon.resolveKeys(cfg)
       stats.track('meta:not_found')
       stats.track(`meta:miss:${idShape(id)}`)
-      stats.track(`meta:miss:ua:${uaClass(req)}`)
+      stats.track(`meta:miss:ua:${clientClass(req, uaClass(req))}`)
       if (!keys) stats.track('meta:miss:unconfigured')
       res.status(404).json({ err: 'not found' })
       return
