@@ -330,7 +330,7 @@ function splitStatsKey(key) {
 const KEYSPACE_GROUPS = [
   { name: 'library', match: 'lib:*' },
   { name: 'libraryParts', match: 'libp:*' },
-  { name: 'parseCache', match: 'pc:*' },
+  { name: 'parseCache', match: 'pc2:*' },
   { name: 'customStreams', match: 'cs:*' },
   { name: 'rateLimit', match: 'rl:*' },
   { name: 'stats', match: `${NS}:*` },

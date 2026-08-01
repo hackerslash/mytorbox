@@ -1,7 +1,7 @@
 const crypto = require('crypto')
 const zlib = require('zlib')
 const { SOURCES, fetchMylist, fetchNewest, buildStreamUrl } = require('./torbox')
-const { parseWorkItems, slugify, makeGuessResolver } = require('./parser')
+const { parseWorkItems, slugify, makeParseResolver } = require('./parser')
 const tmdb = require('./tmdb')
 const posters = require('./posters')
 const redis = require('./redisClient')
@@ -222,18 +222,7 @@ async function resolveGroups(keysAndGroups, kind, tmdbKey) {
   return { results, details }
 }
 
-async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey = null) {
-  const bySource = entriesBySource || (await fetchEntriesBySource(torboxKey))
-
-  const resolver = makeGuessResolver(await loadParseCache(cacheKey))
-  const workItems = []
-  for (const source of SOURCES) {
-    for (const entry of bySource[source] || []) {
-      workItems.push(...parseWorkItems(source, entry, resolver))
-    }
-  }
-  await saveParseCache(cacheKey, resolver.current)
-
+function groupWorkItems(workItems) {
   const movieGroups = new Map()
   const seriesGroups = new Map()
 
@@ -246,13 +235,15 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
       const g = seriesGroups.get(key)
       g.year = g.year || w.year
       g.createdAt = Math.max(g.createdAt, w.createdAt)
-      if (w.episode == null) {
+      if (!w.episodes.length) {
         g.unnumbered.push(w)
         continue
       }
-      const epKey = `${w.season}:${w.episode}`
-      if (!g.episodes.has(epKey)) g.episodes.set(epKey, [])
-      g.episodes.get(epKey).push(w)
+      for (const episode of w.episodes) {
+        const epKey = `${w.season}:${episode}`
+        if (!g.episodes.has(epKey)) g.episodes.set(epKey, [])
+        g.episodes.get(epKey).push(w)
+      }
     } else {
       const key = `${slugify(w.title)}-${w.year || 'na'}`
       if (!movieGroups.has(key)) {
@@ -263,6 +254,72 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
       g.createdAt = Math.max(g.createdAt, w.createdAt)
     }
   }
+
+  return { movieGroups, seriesGroups }
+}
+
+function seriesVideos(sid, g) {
+  const specialTitles = new Map()
+  if (g.unnumbered.length) {
+    let slot = 0
+    for (const epKey of g.episodes.keys()) {
+      const [s, e] = epKey.split(':').map(Number)
+      if (s === 0) slot = Math.max(slot, e)
+    }
+    const byFilename = [...g.unnumbered].sort((a, b) => a.filename.localeCompare(b.filename))
+    byFilename.forEach((w, i) => {
+      const epKey = `0:${slot + i + 1}`
+      g.episodes.set(epKey, [w])
+      specialTitles.set(epKey, w.filename.replace(/\.[a-z0-9]{2,4}$/i, ''))
+    })
+  }
+
+  const ordered = []
+  for (const epKey of g.episodes.keys()) {
+    const [season, episode] = epKey.split(':').map(Number)
+    if (!Number.isInteger(season) || !Number.isInteger(episode)) {
+      stats.track('lib:bad_episode_key')
+      continue
+    }
+    ordered.push({ epKey, season, episode })
+  }
+  ordered.sort((a, b) => a.season - b.season || a.episode - b.episode)
+
+  const videos = []
+  const streams = {}
+  for (const { epKey, season, episode } of ordered) {
+    const vid = `${sid}:${season}:${episode}`
+    videos.push({
+      id: vid,
+      title: specialTitles.get(epKey) || `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`,
+      season,
+      episode,
+    })
+    streams[vid] = sortedBySize(g.episodes.get(epKey)).map(streamEntry)
+  }
+  return { videos, streams }
+}
+
+async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey = null) {
+  const bySource = entriesBySource || (await fetchEntriesBySource(torboxKey))
+
+  const resolver = makeParseResolver(await loadParseCache(cacheKey))
+  const workItems = []
+  for (const source of SOURCES) {
+    for (const entry of bySource[source] || []) {
+      workItems.push(...parseWorkItems(source, entry, resolver))
+    }
+  }
+  await saveParseCache(cacheKey, resolver.current)
+
+  let guessitSkipped = 0
+  for (const parsed of resolver.current.values()) {
+    if (parsed && parsed.guessit === false) guessitSkipped++
+  }
+  stats.track('parse:names', resolver.current.size)
+  stats.track('parse:guessit_skipped', guessitSkipped)
+
+  const { movieGroups, seriesGroups } = groupWorkItems(workItems)
 
   const movieKeys = [...movieGroups.entries()]
   const seriesKeys = [...seriesGroups.entries()]
@@ -313,39 +370,8 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
     const logo = details.logo
     if (logo) preview.logo = logo
 
-    const specialTitles = new Map()
-    if (g.unnumbered.length) {
-      let slot = 0
-      for (const epKey of g.episodes.keys()) {
-        const [s, e] = epKey.split(':').map(Number)
-        if (s === 0) slot = Math.max(slot, e)
-      }
-      const ordered = [...g.unnumbered].sort((a, b) => a.filename.localeCompare(b.filename))
-      ordered.forEach((w, i) => {
-        const epKey = `0:${slot + i + 1}`
-        g.episodes.set(epKey, [w])
-        specialTitles.set(epKey, w.filename.replace(/\.[a-z0-9]{2,4}$/i, ''))
-      })
-    }
-
-    const videos = []
-    const epKeysSorted = [...g.episodes.keys()].sort((a, b) => {
-      const [aSeason, aEpisode] = a.split(':').map(Number)
-      const [bSeason, bEpisode] = b.split(':').map(Number)
-      return aSeason - bSeason || aEpisode - bEpisode
-    })
-    for (const epKey of epKeysSorted) {
-      const [season, episode] = epKey.split(':').map(Number)
-      const items = g.episodes.get(epKey)
-      const vid = `${sid}:${season}:${episode}`
-      videos.push({
-        id: vid,
-        title: specialTitles.get(epKey) || `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`,
-        season,
-        episode,
-      })
-      lib.streams[vid] = sortedBySize(items).map(streamEntry)
-    }
+    const { videos, streams } = seriesVideos(sid, g)
+    Object.assign(lib.streams, streams)
 
     lib.series.push(preview)
     lib.meta[sid] = { ...preview, videos, description: tmdbRes ? tmdbRes.overview : null }
@@ -374,7 +400,7 @@ function redisKeyFor(cacheKey) {
 }
 
 function parseCacheKeyFor(cacheKey) {
-  return `pc:${cacheKey}`
+  return `pc2:${cacheKey}`
 }
 
 function partKeyFor(cacheKey, index) {
@@ -618,6 +644,7 @@ async function clearCache() {
         ...(await redis.keys('lib:*')),
         ...(await redis.keys('libp:*')),
         ...(await redis.keys('pc:*')),
+        ...(await redis.keys('pc2:*')),
         ...(await redis.keys('tmdb:*')),
         ...(await redis.keys('cm:*')),
         ...(await redis.keys('cms:*')),
@@ -634,6 +661,8 @@ async function clearCache() {
 module.exports = {
   getLibrary,
   buildLibrary,
+  groupWorkItems,
+  seriesVideos,
   clearCache,
   posterUrlFor,
   withPosters,

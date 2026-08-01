@@ -1,0 +1,118 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+
+const { parseWorkItems, stripTechnicalTokens } = require('../src/parser')
+
+function parse(filename, { size = 5 * 1024 ** 3, entryName = filename } = {}) {
+  const entry = {
+    id: 'item-1',
+    created_at: '2026-07-01T00:00:00Z',
+    name: entryName,
+    files: [{ id: 0, short_name: filename, size }],
+  }
+  return [...parseWorkItems('torrents', entry)]
+}
+
+function parseOne(filename, opts) {
+  const items = parse(filename, opts)
+  assert.equal(items.length, 1, `expected exactly one work item for ${filename}`)
+  return items[0]
+}
+
+test('separates a season/episode marker fused to the next word', () => {
+  const w = parseOne('Dutton.Ranch.S01E05WEB-DL.1080p.RGzsRutracker.mkv')
+  assert.equal(w.title, 'Dutton Ranch')
+  assert.equal(w.season, 1)
+  assert.deepEqual(w.episodes, [5])
+})
+
+test('separates the ...ab multi-episode convention', () => {
+  const w = parseOne(
+    'SpongeBob.SquarePants.S04E09ab - .Krusty.Towers.and.Mrs.Puff.Youre.Fired.1080p.AMZN.WEB-DL.AAC2.0.h.264-CHX.mp4'
+  )
+  assert.equal(w.title, 'SpongeBob SquarePants')
+  assert.equal(w.season, 4)
+  assert.deepEqual(w.episodes, [9])
+})
+
+test('separates a marker fused to an episode title', () => {
+  const w = parseOne('Futurama.S01E04Loves.Labous.Lost.in.Space.DVDRip.x264.mkv')
+  assert.equal(w.title, 'Futurama')
+  assert.equal(w.season, 1)
+  assert.deepEqual(w.episodes, [4])
+})
+
+test('keeps both numbers of a fused double marker', () => {
+  const w = parseOne(
+    'SpongeBob.SquarePants.S01E28E29.SpongeBob.129-Karate.Choppers.1080p.AMZN.WEB-DL.DDP2.0.x264-TVSmash.mkv'
+  )
+  assert.equal(w.title, 'SpongeBob SquarePants')
+  assert.equal(w.season, 1)
+  assert.deepEqual(w.episodes, [28, 29])
+})
+
+test('keeps both numbers of a dashed multi-episode file', () => {
+  const w = parseOne(
+    'SpongeBob SquarePants (1999) - S02E01-E02 - Something Smells and Bossy Boots (1080p AMZN WEB-DL x265 RCVR).mkv'
+  )
+  assert.equal(w.title, 'SpongeBob SquarePants')
+  assert.equal(w.year, 1999)
+  assert.equal(w.season, 2)
+  assert.deepEqual(w.episodes, [1, 2])
+})
+
+test('ignores a release-group tag that looks like a second season', () => {
+  const w = parseOne('Futurama S01E01 Space Pilot 3000  [2160p x265 10bit S91 Joy].mkv')
+  assert.equal(w.season, 1)
+  assert.deepEqual(w.episodes, [1])
+})
+
+test('season and episodes are always plain integers', () => {
+  const fixtures = [
+    'Dutton.Ranch.S01E05WEB-DL.1080p.RGzsRutracker.mkv',
+    'SpongeBob SquarePants (1999) - S02E01-E02 - Something Smells (1080p AMZN WEB-DL x265 RCVR).mkv',
+    'Futurama S01E01 Space Pilot 3000  [2160p x265 10bit S91 Joy].mkv',
+    'Philip K. Dick\'s Electric Dreams S01E01 Real Life  (2160p x265 10bit S101 Joy).mkv',
+    'Comedians.In.Cars.Getting.Coffee.S04E05.Jon.Stewart.720p.WEBRip.AAC2. 0.x264-monkee.mkv',
+    'Jersey Shore Family Vacation S08E31 No Longer Under Construction 1080p AMZN WEB-DL DDP2 0 H 264-RAWR[EZTVx.to].mkv',
+    'Scooby-Doo, Where Are You! (1969) S01E03 1080p BluRay x265.mkv',
+  ]
+  for (const filename of fixtures) {
+    for (const w of parse(filename)) {
+      if (!w.isEpisode) continue
+      assert.ok(Number.isInteger(w.season), `${filename}: season ${JSON.stringify(w.season)} is not an integer`)
+      assert.ok(Array.isArray(w.episodes), `${filename}: episodes is not an array`)
+      for (const e of w.episodes) {
+        assert.ok(Number.isInteger(e), `${filename}: episode ${JSON.stringify(e)} is not an integer`)
+      }
+    }
+  }
+})
+
+test('movies are unaffected', () => {
+  const w = parseOne('The.Super.Mario.Bros.Movie.2023.BDRemux.1080p.pk.mkv')
+  assert.equal(w.isEpisode, false)
+  assert.equal(w.title, 'The Super Mario Bros Movie')
+  assert.equal(w.year, 2023)
+  assert.equal(w.season, null)
+  assert.deepEqual(w.episodes, [])
+})
+
+test('an episode with no discoverable number yields an empty episode list', () => {
+  const w = parseOne('Wildboyz Season1 Bonus DVD.mp4')
+  assert.equal(w.isEpisode, true)
+  assert.equal(w.season, 1)
+  assert.deepEqual(w.episodes, [])
+})
+
+test('junk files and undersized movies are skipped', () => {
+  assert.deepEqual(parse('Some.Movie.2024.1080p-sample.mkv'), [])
+  assert.deepEqual(parse('The.Super.Mario.Bros.Movie.2023.1080p.mkv', { size: 1024 }), [])
+})
+
+test('stripTechnicalTokens only splits a marker glued to a letter', () => {
+  assert.equal(stripTechnicalTokens('Show.S01E05WEB-DL.mkv'), 'Show.S01E05.WEB-DL.mkv')
+  assert.equal(stripTechnicalTokens('Show.S01E05.WEB-DL.mkv'), 'Show.S01E05.WEB-DL.mkv')
+  assert.equal(stripTechnicalTokens('Show - S02E01-E02 - Title.mkv'), 'Show - S02E01-E02 - Title.mkv')
+  assert.equal(stripTechnicalTokens('Show.s01e05web.mkv'), 'Show.s01e05.web.mkv')
+})
