@@ -1,5 +1,16 @@
 const { stripTags } = require('./normalize')
 
+const LEADING_MARKER_RE = /^(?:[Ss]\d{1,2}[\s._-]?[Ee][Pp]?\d{1,3}|[Ee][Pp]?(?:isode)?[\s._-]?\d{1,4}\b)/
+const LEADING_NUMBER_RE = /^(\d{1,3})(?:[\s._-]*[-\u2013\u2014).:]|\s)/
+
+function namesTheSeries(filename, episodes) {
+  const name = filename.trim()
+  if (LEADING_MARKER_RE.test(name)) return false
+  const leading = LEADING_NUMBER_RE.exec(name)
+  if (leading && episodes.includes(Number.parseInt(leading[1], 10))) return false
+  return true
+}
+
 const EPISODE_MARKER_RE =
   /(?:s\d{1,2}[\s._-]*e(?:p|pisode)?[\s._-]?\d{1,3}|\bs\d{1,2}\b|\be(?:p|pisode)?[\s._-]?\d{1,4}\b|\b\d{1,2}x\d{1,3}\b)/i
 
@@ -41,6 +52,7 @@ function titleFromFilename(name) {
 
 module.exports = {
   EPISODE_MARKER_RE,
+  namesTheSeries,
   splitSeasonSuffix,
   dashEpisode,
   looseEpisode,

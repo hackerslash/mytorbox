@@ -3,6 +3,7 @@ const { MIN_FILE_SIZE_BYTES } = require('../config')
 const { cleanName, isJunkFile } = require('./normalize')
 const {
   EPISODE_MARKER_RE,
+  namesTheSeries,
   splitSeasonSuffix,
   dashEpisode,
   looseEpisode,
@@ -27,7 +28,7 @@ function* parseWorkItems(source, entry, resolver = DIRECT_RESOLVER) {
     let year = parsed.year
     let isEpisode = parsed.isEpisode
     let explicitSeason = isEpisode ? parsed.season : null
-    let season = isEpisode ? parsed.season || 1 : null
+    let season = isEpisode ? parsed.season ?? 1 : null
     let episodes = isEpisode ? parsed.episodes : []
 
     if (isEpisode && !episodes.length) {
@@ -35,15 +36,18 @@ function* parseWorkItems(source, entry, resolver = DIRECT_RESOLVER) {
       if (recovered != null) episodes = [recovered]
     }
 
+    if (isEpisode && title && entry.name && !namesTheSeries(cleaned, episodes)) {
+      const entryName = cleanName(entry.name)
+      if (entryParse === undefined) entryParse = resolver.resolve(entryName)
+      if (entryParse.title) title = entryParse.title
+    }
+
     if (!title && entry.name) {
       const entryName = cleanName(entry.name)
       if (entryParse === undefined) entryParse = resolver.resolve(entryName)
       title = entryParse.title
       year = year || entryParse.year
-      if (isEpisode) {
-        explicitSeason = explicitSeason ?? entryParse.season
-        season = season || entryParse.season || 1
-      }
+      if (isEpisode) explicitSeason = explicitSeason ?? entryParse.season
       if (!title) {
         const fromEntry = titleFromFilename(entryName)
         if (fromEntry !== 'Unknown') title = fromEntry
@@ -60,7 +64,7 @@ function* parseWorkItems(source, entry, resolver = DIRECT_RESOLVER) {
     if (isEpisode) {
       const split = splitSeasonSuffix(title)
       title = split.title
-      if (split.season != null) season = split.season
+      if (split.season != null && parsed.season == null) season = split.season
     }
 
     if (!isEpisode && (f.size || 0) < MIN_FILE_SIZE_BYTES) continue

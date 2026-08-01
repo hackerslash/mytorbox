@@ -116,3 +116,47 @@ test('stripTechnicalTokens only splits a marker glued to a letter', () => {
   assert.equal(stripTechnicalTokens('Show - S02E01-E02 - Title.mkv'), 'Show - S02E01-E02 - Title.mkv')
   assert.equal(stripTechnicalTokens('Show.s01e05web.mkv'), 'Show.s01e05.web.mkv')
 })
+
+test('a filename that leads with its episode number takes the series name from the torrent', () => {
+  const w = parseOne('01- Pilot.mkv', { entryName: 'Rick and Morty Season 1 (2160p)' })
+  assert.equal(w.title, 'Rick and Morty')
+  assert.equal(w.isEpisode, true)
+  assert.deepEqual(w.episodes, [1])
+})
+
+test('a filename that leads with Episode N takes the series name from the torrent', () => {
+  const w = parseOne('Episode 8 Interdimensional Cable.mkv', {
+    entryName: 'Rick And Morty (2013) Season 01 S01 (2160p BluRay X265 HEVC)',
+  })
+  assert.equal(w.title, 'Rick And Morty')
+})
+
+test('a filename that leads with a marker takes the series name from the torrent', () => {
+  const w = parseOne('S00E09 - The Rise Of Tommy Shelby (1080p YouTube WEB-DL x265 Ghost).mkv', {
+    entryName: 'Peaky Blinders (2013) Season 1-6 S01-S06 + Extras (1080p BluRay x265)',
+  })
+  assert.equal(w.title, 'Peaky Blinders')
+  assert.equal(w.season, 0)
+  assert.deepEqual(w.episodes, [9])
+})
+
+test('a filename that already names the series keeps its own title', () => {
+  const w = parseOne('Rick and Morty S02E08 Interdimensional Cable 2 Tempting Fate.mp4', {
+    entryName: 'Rick and Morty.2013.S01-S07.BluRay.2160p.5.1 AAC.H265.10bit-Zero00',
+  })
+  assert.equal(w.title, 'Rick and Morty')
+  assert.equal(w.season, 2)
+  assert.deepEqual(w.episodes, [8])
+})
+
+test('a series whose name starts with a number is not overwritten', () => {
+  const w = parseOne('56 Days S01E03 1080p WEB-DL.mkv', { entryName: 'Some Torrent Pack 2026 1080p' })
+  assert.equal(w.title, '56 Days')
+  assert.deepEqual(w.episodes, [3])
+})
+
+test('a season from the filename marker is not overridden by the torrent title suffix', () => {
+  const w = parseOne('01. Episode One.mkv', { entryName: 'Some Show Season 1 Серии 1-10 [2022 WEB-DL]' })
+  assert.equal(w.season, 1)
+  assert.deepEqual(w.episodes, [1])
+})
