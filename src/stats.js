@@ -13,6 +13,8 @@ const {
   STATS_LIBRARY_SAMPLE_LIMIT,
   STATS_UA_SAMPLE_LIMIT,
   STATS_UA_MAX_LENGTH,
+  STATS_FIRST_SEEN_TTL_SECONDS,
+  STATS_LATENCY_BUCKETS_MS,
 } = require('./config')
 
 const NS = 'st'
@@ -23,6 +25,8 @@ const HOUR_MS = 60 * 60 * 1000
 
 const LATENCY_SUM = 'ms'
 const LATENCY_COUNT = 'msn'
+const LATENCY_BUCKET = 'msb'
+const LATENCY_PREFIXES = [LATENCY_SUM, LATENCY_COUNT, LATENCY_BUCKET].map((p) => `${p}:`)
 
 function enabled() {
   return Boolean(redis) && STATS_ENABLED
@@ -88,6 +92,13 @@ let ttlSetDay = null
 
 function ttlFor(key) {
   return key.startsWith(`${NS}:h:`) ? STATS_HOURLY_TTL_SECONDS : STATS_TTL_SECONDS
+}
+
+function latencyBucket(ms) {
+  for (const bound of STATS_LATENCY_BUCKETS_MS) {
+    if (ms <= bound) return String(bound)
+  }
+  return 'inf'
 }
 
 function needsTtl(key) {
@@ -229,8 +240,10 @@ function trackHourly(event, by = 1) {
 function trackDuration(event, ms) {
   if (!enabled() || !Number.isFinite(ms)) return
   const day = dayId()
-  queue(counterKey(`${LATENCY_SUM}:${event}`, day), Math.max(0, Math.round(ms)))
+  const rounded = Math.max(0, Math.round(ms))
+  queue(counterKey(`${LATENCY_SUM}:${event}`, day), rounded)
   queue(counterKey(`${LATENCY_COUNT}:${event}`, day), 1)
+  queue(counterKey(`${LATENCY_BUCKET}:${event}:${latencyBucket(rounded)}`, day), 1)
 }
 
 const recentUsers = new Map()
@@ -240,7 +253,9 @@ function throttled(hash) {
   const now = Date.now()
   const last = recentUsers.get(hash)
   if (last && now - last < STATS_USER_THROTTLE_MS) return true
-  if (recentUsers.size >= MAX_RECENT_USERS) recentUsers.clear()
+  while (recentUsers.size >= MAX_RECENT_USERS) {
+    recentUsers.delete(recentUsers.keys().next().value)
+  }
   recentUsers.set(hash, now)
   return false
 }
@@ -249,7 +264,7 @@ async function markUser(hash) {
   const day = dayId()
   const added = await redis.pfadd(usersKey(day), hash)
   if (added === 1) await redis.expire(usersKey(day), STATS_TTL_SECONDS)
-  const isNew = await redis.set(firstSeenKey(hash), Date.now(), 'EX', STATS_TTL_SECONDS, 'NX')
+  const isNew = await redis.set(firstSeenKey(hash), Date.now(), 'EX', STATS_FIRST_SEEN_TTL_SECONDS, 'NX')
   if (isNew) track('users:new')
 }
 
@@ -283,12 +298,28 @@ function trackLibraryShape(hash, lib, buildMs) {
   writeLibraryShape(hash, shape).catch(() => {})
 }
 
-async function scanKeys(match, limit = STATS_SCAN_LIMIT) {
+const KEYSPACE_GROUPS = [
+  { name: 'library', prefix: 'lib:' },
+  { name: 'libraryParts', prefix: 'libp:' },
+  { name: 'parseCache', prefix: 'pc2:' },
+  { name: 'tmdb', prefix: 'tmdb:' },
+  { name: 'cinemeta', prefix: 'cm:' },
+  { name: 'cinemetaSearch', prefix: 'cms:' },
+  { name: 'customStreams', prefix: 'cs:' },
+  { name: 'rateLimit', prefix: 'rl:' },
+  { name: 'stats', prefix: `${NS}:` },
+]
+
+const SCAN_COUNT = 1000
+
+// Counters are read from this scan, so it must not be cut short by unrelated cache keys —
+// MATCH keeps the limit scoped to stats keys instead of the whole keyspace.
+async function scanMatch(match, limit = STATS_SCAN_LIMIT) {
   const keys = []
   let cursor = '0'
   let truncated = false
   do {
-    const [next, batch] = await redis.scan(cursor, 'MATCH', match, 'COUNT', 500)
+    const [next, batch] = await redis.scan(cursor, 'MATCH', match, 'COUNT', SCAN_COUNT)
     cursor = next
     for (const k of batch) keys.push(k)
     if (keys.length >= limit) {
@@ -297,6 +328,28 @@ async function scanKeys(match, limit = STATS_SCAN_LIMIT) {
     }
   } while (cursor !== '0')
   return { keys, truncated }
+}
+
+async function scanKeyspace(limit = STATS_SCAN_LIMIT) {
+  const groups = {}
+  for (const g of KEYSPACE_GROUPS) groups[g.name] = []
+  let cursor = '0'
+  let seen = 0
+  let truncated = false
+  do {
+    const [next, batch] = await redis.scan(cursor, 'COUNT', SCAN_COUNT)
+    cursor = next
+    for (const key of batch) {
+      seen += 1
+      const group = KEYSPACE_GROUPS.find((g) => key.startsWith(g.prefix))
+      if (group) groups[group.name].push(key)
+    }
+    if (seen >= limit) {
+      truncated = true
+      break
+    }
+  } while (cursor !== '0')
+  return { groups, truncated, seen }
 }
 
 async function mgetAll(keys) {
@@ -327,15 +380,6 @@ function splitStatsKey(key) {
   return { event, bucket }
 }
 
-const KEYSPACE_GROUPS = [
-  { name: 'library', match: 'lib:*' },
-  { name: 'libraryParts', match: 'libp:*' },
-  { name: 'parseCache', match: 'pc2:*' },
-  { name: 'customStreams', match: 'cs:*' },
-  { name: 'rateLimit', match: 'rl:*' },
-  { name: 'stats', match: `${NS}:*` },
-]
-
 async function readInfo() {
   try {
     const raw = await redis.info()
@@ -354,6 +398,8 @@ async function readInfo() {
       keyspaceHits: fields.keyspace_hits ? num(fields.keyspace_hits) : null,
       keyspaceMisses: fields.keyspace_misses ? num(fields.keyspace_misses) : null,
       evictedKeys: fields.evicted_keys ? num(fields.evicted_keys) : null,
+      maxmemoryPolicy: fields.maxmemory_policy || null,
+      nodeScoped: true,
     }
   } catch {
     return null
@@ -367,6 +413,29 @@ function windowsFor(byDay, days) {
     d7: sumWindow(byDay, days.slice(-7)),
     d30: sumWindow(byDay, days),
   }
+}
+
+function coverageFor(since, days, trackingSince) {
+  const startOf = (day) => (trackingSince && trackingSince > day ? trackingSince : day)
+  return {
+    since: since || null,
+    partialD7: Boolean(since) && since > startOf(days[days.length - 7]),
+    partialD30: Boolean(since) && since > startOf(days[0]),
+  }
+}
+
+function p95Bucket(buckets, window) {
+  if (!buckets) return null
+  const value = (b) => (b === 'inf' ? Infinity : Number(b))
+  const bounds = Object.keys(buckets).sort((a, b) => value(a) - value(b))
+  const total = bounds.reduce((n, b) => n + num(buckets[b][window]), 0)
+  if (!total) return null
+  let seen = 0
+  for (const b of bounds) {
+    seen += num(buckets[b][window])
+    if (seen >= total * 0.95) return b
+  }
+  return bounds[bounds.length - 1]
 }
 
 async function uniqueUsers(days, availableDays) {
@@ -394,6 +463,7 @@ async function readLibraryShapes(keys) {
     users: 0, tracked: keys.length, sampled: sampled.length,
     truncated: sampled.length < keys.length,
     movies: 0, series: 0, episodes: 0, streams: 0, top: [],
+    oldestUpdate: null, newestUpdate: null,
   }
   const pipe = redis.pipeline()
   for (const k of sampled) pipe.hgetall(k)
@@ -417,6 +487,7 @@ async function readLibraryShapes(keys) {
     })
   })
   const total = (field) => rows.reduce((n, r) => n + r[field], 0)
+  const stamps = rows.map((r) => r.updatedAt).filter(Boolean)
   return {
     ...empty,
     users: rows.length,
@@ -424,6 +495,8 @@ async function readLibraryShapes(keys) {
     series: total('series'),
     episodes: total('episodes'),
     streams: total('streams'),
+    oldestUpdate: stamps.length ? Math.min(...stamps) : null,
+    newestUpdate: stamps.length ? Math.max(...stamps) : null,
     top: [...rows]
       .sort((a, b) => b.movies + b.episodes - (a.movies + a.episodes))
       .slice(0, STATS_TOP_LIBRARIES),
@@ -451,15 +524,9 @@ async function buildSummary() {
   const days = recentDays(STATS_RETENTION_DAYS)
   const hours = recentHours(24)
 
-  const scanned = await Promise.all(KEYSPACE_GROUPS.map((g) => scanKeys(g.match)))
-  const groups = {}
-  let truncated = false
-  let statsKeys = []
-  KEYSPACE_GROUPS.forEach((g, i) => {
-    groups[g.name] = scanned[i].keys
-    truncated = truncated || scanned[i].truncated
-    if (g.name === 'stats') statsKeys = scanned[i].keys
-  })
+  const [composition, statsScan] = await Promise.all([scanKeyspace(), scanMatch(`${NS}:*`)])
+  const { groups, truncated, seen } = composition
+  const statsKeys = statsScan.keys
 
   const counterKeys = statsKeys.filter((k) => k.startsWith(`${NS}:c:`))
   const hourlyKeys = statsKeys.filter((k) => k.startsWith(`${NS}:h:`))
@@ -474,11 +541,15 @@ async function buildSummary() {
   }))
 
   const byEvent = {}
+  const firstDay = {}
   for (const [key, value] of counterValues) {
     const parts = splitStatsKey(key)
     if (!parts) continue
     if (!byEvent[parts.event]) byEvent[parts.event] = {}
     byEvent[parts.event][parts.bucket] = num(value)
+    if (!firstDay[parts.event] || parts.bucket < firstDay[parts.event]) {
+      firstDay[parts.event] = parts.bucket
+    }
   }
   const hourlyByEvent = {}
   for (const [key, value] of hourlyValues) {
@@ -490,20 +561,37 @@ async function buildSummary() {
 
   const counters = {}
   const latency = {}
+  const trackingSince = Object.values(firstDay).sort()[0] || null
   for (const [event, byDay] of Object.entries(byEvent)) {
-    if (event.startsWith(`${LATENCY_SUM}:`) || event.startsWith(`${LATENCY_COUNT}:`)) continue
-    counters[event] = { ...windowsFor(byDay, days), daily: days.map((d) => num(byDay[d])) }
+    if (LATENCY_PREFIXES.some((p) => event.startsWith(p))) continue
+    counters[event] = {
+      ...windowsFor(byDay, days),
+      daily: days.map((d) => num(byDay[d])),
+      ...coverageFor(firstDay[event], days, trackingSince),
+    }
+  }
+  const bucketsByName = {}
+  for (const [event, byDay] of Object.entries(byEvent)) {
+    if (!event.startsWith(`${LATENCY_BUCKET}:`)) continue
+    const rest = event.slice(LATENCY_BUCKET.length + 1)
+    const cut = rest.lastIndexOf(':')
+    if (cut === -1) continue
+    const name = rest.slice(0, cut)
+    if (!bucketsByName[name]) bucketsByName[name] = {}
+    bucketsByName[name][rest.slice(cut + 1)] = windowsFor(byDay, days)
   }
   for (const event of Object.keys(byEvent)) {
     if (!event.startsWith(`${LATENCY_SUM}:`)) continue
     const name = event.slice(LATENCY_SUM.length + 1)
     const sums = windowsFor(byEvent[event], days)
     const counts = windowsFor(byEvent[`${LATENCY_COUNT}:${name}`] || {}, days)
+    const buckets = bucketsByName[name] || null
     latency[name] = {
       avgToday: counts.today ? Math.round(sums.today / counts.today) : null,
       avg7d: counts.d7 ? Math.round(sums.d7 / counts.d7) : null,
       avg30d: counts.d30 ? Math.round(sums.d30 / counts.d30) : null,
       samples30d: counts.d30,
+      p95d7: p95Bucket(buckets, 'd7'),
     }
   }
 
@@ -531,9 +619,12 @@ async function buildSummary() {
     (groups.library || []).length +
     (groups.libraryParts || []).length +
     (groups.parseCache || []).length +
+    (groups.tmdb || []).length +
+    (groups.cinemeta || []).length +
+    (groups.cinemetaSearch || []).length +
     csKeys.length +
     rlKeys.length +
-    statsKeys.length
+    (groups.stats || []).length
   const newUsers = counters['users:new'] || { today: 0, d7: 0, d30: 0, daily: days.map(() => 0) }
   const requestDaily = (counters.req && counters.req.daily) || days.map(() => 0)
 
@@ -541,6 +632,8 @@ async function buildSummary() {
     generatedAt: Date.now(),
     buildMs: Date.now() - startedAt,
     windowDays: STATS_RETENTION_DAYS,
+    trackingSince,
+    latencyBuckets: STATS_LATENCY_BUCKETS_MS,
     days,
     hours,
     redis: { configured: true, trackingEnabled: STATS_ENABLED, dbsize, info },
@@ -574,13 +667,36 @@ async function buildSummary() {
       library: (groups.library || []).length,
       libraryParts: (groups.libraryParts || []).length,
       parseCache: (groups.parseCache || []).length,
+      tmdb: (groups.tmdb || []).length,
+      cinemeta: (groups.cinemeta || []).length,
+      cinemetaSearch: (groups.cinemetaSearch || []).length,
       customStreams: csKeys.length,
       rateLimit: rlKeys.length,
-      stats: statsKeys.length,
-      tmdbAndOther: dbsize === null ? null : Math.max(0, dbsize - counted),
+      stats: (groups.stats || []).length,
+      other: Math.max(0, seen - counted),
+      scanned: seen,
     },
-    scan: { truncated, keysSeen: counted },
+    scan: { truncated, statsTruncated: statsScan.truncated, keysSeen: counted },
   }
+}
+
+let buildInFlight = null
+
+function buildOnce() {
+  if (buildInFlight) return buildInFlight
+  const run = (async () => {
+    await flushNow()
+    const payload = await buildSummary()
+    try {
+      await redis.set(SUMMARY_KEY, JSON.stringify(payload), 'EX', STATS_SUMMARY_TTL_SECONDS)
+    } catch {}
+    return payload
+  })()
+  buildInFlight = run
+  run.catch(() => {}).then(() => {
+    if (buildInFlight === run) buildInFlight = null
+  })
+  return run
 }
 
 async function summary({ fresh = false } = {}) {
@@ -597,11 +713,7 @@ async function summary({ fresh = false } = {}) {
       if (cached) return { ...JSON.parse(cached), cached: true }
     } catch {}
   }
-  await flushNow()
-  const payload = await buildSummary()
-  try {
-    await redis.set(SUMMARY_KEY, JSON.stringify(payload), 'EX', STATS_SUMMARY_TTL_SECONDS)
-  } catch {}
+  const payload = await buildOnce()
   return { ...payload, cached: false }
 }
 

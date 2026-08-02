@@ -80,7 +80,7 @@ function requireAdmin(req, res, next) {
 }
 
 const app = express()
-app.set('trust proxy', true) // needed for correct req.ip behind a reverse proxy/load balancer, used by rate limiting
+app.set('trust proxy', config.TRUST_PROXY_HOPS) // needed for correct req.ip behind a reverse proxy/load balancer, used by rate limiting
 app.use(cors())
 
 const UNTRACKED_PATHS = /^\/(logo\.png|favicon\.ico|robots\.txt|stats|api\/stats)$/

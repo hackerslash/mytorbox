@@ -350,6 +350,13 @@
   td { border-bottom: 1px solid oklch(38% 0.03 var(--hue) / 0.18); color: var(--text-1); font-variant-numeric: tabular-nums; }
   td.name { color: var(--text-0); font-family: var(--font-mono); font-size: var(--fs-xs); }
   td.strong { color: var(--text-0); font-weight: 600; }
+  .partial { color: var(--amber); cursor: help; margin-left: 2px; }
+  .since {
+    color: var(--text-2);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    margin-left: var(--sp-2);
+  }
   td .mono {
     font-family: var(--font-mono);
     font-size: 11px;
@@ -580,6 +587,25 @@
     var total = a + b
     return total > 0 ? a / total : null
   }
+  function crow(payload, event) {
+    return (payload.counters && payload.counters[event]) || null
+  }
+  function isPartial(row, window) {
+    return Boolean(row && (window === 'd7' ? row.partialD7 : row.partialD30))
+  }
+  function partialMark(row, window) {
+    if (!isPartial(row, window)) return ''
+    return '<span class="partial" title="first recorded on ' + esc(row.since || '') + '">*</span>'
+  }
+  function anyPartial(payload, events, window) {
+    return events.some(function (e) { return isPartial(crow(payload, e), window) })
+  }
+  function bucketLabel(payload, b) {
+    if (b === null || b === undefined) return '—'
+    var bounds = payload.latencyBuckets || []
+    if (b !== 'inf') return '≤' + ms(Number(b))
+    return bounds.length ? '>' + ms(bounds[bounds.length - 1]) : 'slower'
+  }
 
   function tile(k, v, sub, accent) {
     return '<div class="tile' + (accent ? ' accent' : '') + '">' +
@@ -670,12 +696,14 @@
 
     var rows = kinds.map(function (k) {
       var l = lat['req:' + k] || {}
+      var row = crow(p, 'req:' + k)
       return [
         label(k),
         n(c(p, 'req:' + k, 'today')),
-        n(c(p, 'req:' + k, 'd7')),
-        '<span class="strong">' + n(c(p, 'req:' + k)) + '</span>',
+        n(c(p, 'req:' + k, 'd7')) + partialMark(row, 'd7'),
+        '<span class="strong">' + n(c(p, 'req:' + k)) + '</span>' + partialMark(row, 'd30'),
         l.avg7d !== null && l.avg7d !== undefined ? ms(l.avg7d) : '—',
+        bucketLabel(p, l.p95d7),
       ]
     })
 
@@ -694,8 +722,10 @@
         chart(req.hourly || [], hours.map(hourLabel), 'blue', compact)) +
       '</div>' +
       '<div class="grid cols-2" style="margin-top:var(--sp-3)">' +
-      card('03', 'c-violet', 'By endpoint', 'avg = 7d',
-        table(['Endpoint', 'Today', '7d', '30d', 'Avg'], rows)) +
+      card('03', 'c-violet', 'By endpoint',
+        anyPartial(p, kinds.map(function (k) { return 'req:' + k }), 'd30')
+          ? 'avg = 7d · * partial window' : 'avg = 7d',
+        table(['Endpoint', 'Today', '7d', '30d', 'Avg', 'p95 · 7d'], rows)) +
       card('04', 'c-green', 'Response status', statusTotal ? n(statusTotal) + ' responses' : '',
         statusRows || '<p class="empty">Nothing recorded yet.</p>') +
       '</div>'
@@ -727,6 +757,7 @@
       ]
     })
 
+    var build = ((p.requests || {}).latency || {})['lib:build'] || {}
     var totals = kv([
       ['Tracked libraries', lib.truncated ? n(users) + ' of ' + n(lib.tracked) : n(users)],
       ['Movies', n(lib.movies)],
@@ -734,11 +765,13 @@
       ['Episodes', n(lib.episodes)],
       ['Stream links', n(lib.streams)],
       ['Avg per user', n(avg(lib.movies)) + ' mv · ' + n(avg(lib.series)) + ' sr · ' + n(avg(lib.episodes)) + ' ep'],
-      ['Avg rebuild', ms(((p.requests || {}).latency || {})['lib:build'] ? p.requests.latency['lib:build'].avg30d : null)],
+      ['Avg rebuild', ms(build.avg30d !== undefined ? build.avg30d : null)],
+      ['p95 rebuild', bucketLabel(p, build.p95d7)],
+      ['Snapshots span', lib.oldestUpdate ? ago(lib.oldestUpdate) + ' → ' + ago(lib.newestUpdate) : '—'],
     ])
 
     return '<div class="grid cols-2" style="margin-top:var(--sp-3)">' +
-      card('07', 'c-amber', 'Library totals', lib.truncated ? 'sampled' : 'across all users', totals) +
+      card('07', 'c-amber', 'Library totals', lib.truncated ? 'sampled' : 'sum of last-known snapshots', totals) +
       card('08', 'c-amber', 'Largest libraries', 'top ' + (lib.top || []).length,
         table(['User', 'Mv', 'Sr', 'Ep', 'Streams', 'Build', 'Updated'], rows,
           'No library has been built since tracking started.')) +
@@ -796,31 +829,42 @@
 
     var ks = p.keyspace || {}
     var total = ks.total || 0
+    var scanned = ks.scanned || total
     var parts = [
       ['Library caches', ks.library, ''],
       ['Library parts', ks.libraryParts, ''],
       ['Parse caches', ks.parseCache, 'blue'],
-      ['TMDB cache + other', ks.tmdbAndOther, 'green'],
+      ['TMDB cache', ks.tmdb, 'green'],
+      ['Cinemeta meta', ks.cinemeta, 'green'],
+      ['Cinemeta search', ks.cinemetaSearch, 'green'],
       ['Custom streams', ks.customStreams, 'amber'],
       ['Rate limiters', ks.rateLimit, ''],
       ['Stats counters', ks.stats, 'blue'],
+      ['Unclassified', ks.other, ''],
     ]
     var keyspace = parts.map(function (part) {
-      return meter(part[0], part[1] || 0, total, part[2], n(part[1]))
+      return meter(part[0], part[1] || 0, scanned, part[2], n(part[1]))
     }).join('')
 
     var info = (p.redis || {}).info
     var redisRows = [['Keys total', n(total)]]
+    if (total > scanned) redisRows.push(['— written during scan', n(total - scanned), true])
     if (info) {
-      if (info.usedMemory) redisRows.push(['Memory used', esc(info.usedMemory)])
-      if (info.peakMemory) redisRows.push(['Memory peak', esc(info.peakMemory), true])
       if (info.version) redisRows.push(['Redis version', esc(info.version), true])
-      if (info.connectedClients !== null && info.connectedClients !== undefined) redisRows.push(['Clients', n(info.connectedClients), true])
-      if (info.uptimeDays !== null && info.uptimeDays !== undefined) redisRows.push(['Uptime', n(info.uptimeDays) + 'd', true])
+      var node = []
+      if (info.usedMemory) node.push(['Memory used', esc(info.usedMemory), true])
+      if (info.peakMemory) node.push(['Memory peak', esc(info.peakMemory), true])
+      if (info.connectedClients !== null && info.connectedClients !== undefined) node.push(['Clients', n(info.connectedClients), true])
+      if (info.uptimeDays !== null && info.uptimeDays !== undefined) node.push(['Uptime', n(info.uptimeDays) + 'd', true])
       if (info.keyspaceHits !== null && info.keyspaceMisses !== null && info.keyspaceHits !== undefined) {
-        redisRows.push(['Server hit rate', pct(ratio(info.keyspaceHits, info.keyspaceMisses)), true])
+        node.push(['Hit rate', pct(ratio(info.keyspaceHits, info.keyspaceMisses)), true])
       }
-      if (info.evictedKeys) redisRows.push(['Evicted keys', n(info.evictedKeys), true])
+      if (info.maxmemoryPolicy === 'noeviction') {
+        node.push(['Evicted keys', 'n/a · noeviction', true])
+      } else if (info.evictedKeys !== null && info.evictedKeys !== undefined) {
+        node.push(['Evicted keys', n(info.evictedKeys), true])
+      }
+      redisRows = redisRows.concat(node)
     }
     var rl = p.rateLimit || {}
     redisRows.push(['IPs under rate limit', n(rl.trackedIps)])
@@ -832,9 +876,13 @@
     })
     if (c(p, 'admin:auth_failed')) redisRows.push(['Failed admin logins', n(c(p, 'admin:auth_failed'))])
 
+    var ksNotes = []
+    if (p.scan && p.scan.truncated) ksNotes.push('scan truncated')
+    if (info && info.nodeScoped) ksNotes.push('server rows sampled from one node')
+
     return '<div class="grid cols-2" style="margin-top:var(--sp-3)">' +
       card('11', 'c-amber', 'Custom streams', '', custom) +
-      card('12', 'c-violet', 'Redis keyspace', p.scan && p.scan.truncated ? 'scan truncated' : '',
+      card('12', 'c-violet', 'Redis keyspace', ksNotes.join(' · '),
         keyspace + '<div style="margin-top:var(--sp-4)">' + kv(redisRows) + '</div>') +
       '</div>'
   }
@@ -883,11 +931,12 @@
     })
     var rows = filtered.map(function (e) {
       var l = ((p.requests || {}).latency || {})[e]
+      var row = crow(p, e)
       return [
-        label(e),
+        label(e) + (row && row.partialD30 ? '<span class="since">since ' + esc(row.since.slice(5)) + '</span>' : ''),
         n(c(p, e, 'today')),
-        n(c(p, e, 'd7')),
-        '<span class="strong">' + n(c(p, e)) + '</span>',
+        n(c(p, e, 'd7')) + partialMark(row, 'd7'),
+        '<span class="strong">' + n(c(p, e)) + '</span>' + partialMark(row, 'd30'),
         l && l.avg7d !== null && l.avg7d !== undefined ? ms(l.avg7d) : '—',
       ]
     })
@@ -896,8 +945,10 @@
       '<input class="filter-input" id="counter-filter" placeholder="filter events…" value="' + esc(counterFilter) + '">' +
       '</div>' +
       table(['Event', 'Today', '7d', '30d', 'Avg'], rows, 'No counters recorded yet.')
+    var note = filtered.length + ' / ' + events.length + ' events'
+    if (anyPartial(p, filtered, 'd30')) note += ' · * no data before the listed date'
     return '<div style="margin-top:var(--sp-3)">' +
-      card('15', 'c-blue', 'All counters', filtered.length + ' / ' + events.length + ' events', inner) +
+      card('15', 'c-blue', 'All counters', note, inner) +
       '</div>'
   }
 
@@ -909,9 +960,19 @@
     if (p.scan && p.scan.truncated) {
       msgs.push('A keyspace scan hit its safety limit, so keyspace counts are a lower bound.')
     }
+    if (p.scan && p.scan.statsTruncated) {
+      msgs.push('The counter scan hit its safety limit — every count, average and chart below is ' +
+        'missing an unknown share of its data.')
+    }
     if (p.library && p.library.truncated) {
       msgs.push('Library totals cover ' + n(p.library.sampled) + ' of ' + n(p.library.tracked) +
         ' tracked libraries — raise <code>STATS_LIBRARY_SAMPLE_LIMIT</code> to include the rest.')
+    }
+    if (p.trackingSince && p.days && p.trackingSince > p.days[0]) {
+      msgs.push('Counters only reach back to <strong>' + esc(p.trackingSince) + '</strong>, so the ' +
+        p.windowDays + 'd columns cover fewer days than their label. Counters marked ' +
+        '<span class="partial">*</span> have no data before the date shown — either they were added later, ' +
+        'or the event simply had not fired yet.')
     }
     if (!msgs.length) return ''
     return msgs.map(function (m) {

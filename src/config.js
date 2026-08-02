@@ -57,10 +57,14 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET || null
 
 
 const ADDON_ACCESS_TOKEN = process.env.ADDON_ACCESS_TOKEN || null
+const trustProxyHops = parseInt(process.env.TRUST_PROXY_HOPS, 10)
+const TRUST_PROXY_HOPS = Number.isInteger(trustProxyHops) && trustProxyHops >= 0 ? trustProxyHops : 1
 
 const STATS_ENABLED = process.env.STATS_ENABLED !== '0'
 const STATS_TTL_SECONDS = 31 * 24 * 60 * 60
 const STATS_RETENTION_DAYS = 30
+const STATS_FIRST_SEEN_TTL_SECONDS = 365 * 24 * 60 * 60
+const STATS_LATENCY_BUCKETS_MS = [100, 500, 1000, 5000, 15000]
 const statsFlushSeconds = parseInt(process.env.STATS_FLUSH_SECONDS, 10) 
 const STATS_FLUSH_MS = (Number.isInteger(statsFlushSeconds) && statsFlushSeconds >= 1 ? statsFlushSeconds : 60) * 1000
 const STATS_USER_THROTTLE_MS = 5 * 60 * 1000
@@ -119,9 +123,12 @@ module.exports = {
   CUSTOM_STREAM_VERIFY_TTL_SECONDS,
   ADMIN_SECRET,
   ADDON_ACCESS_TOKEN,
+  TRUST_PROXY_HOPS,
   STATS_ENABLED,
   STATS_TTL_SECONDS,
   STATS_RETENTION_DAYS,
+  STATS_FIRST_SEEN_TTL_SECONDS,
+  STATS_LATENCY_BUCKETS_MS,
   STATS_FLUSH_MS,
   STATS_USER_THROTTLE_MS,
   STATS_SUMMARY_TTL_SECONDS,
