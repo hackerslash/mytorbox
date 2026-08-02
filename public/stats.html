@@ -968,12 +968,6 @@
       msgs.push('Library totals cover ' + n(p.library.sampled) + ' of ' + n(p.library.tracked) +
         ' tracked libraries — raise <code>STATS_LIBRARY_SAMPLE_LIMIT</code> to include the rest.')
     }
-    if (p.trackingSince && p.days && p.trackingSince > p.days[0]) {
-      msgs.push('Counters only reach back to <strong>' + esc(p.trackingSince) + '</strong>, so the ' +
-        p.windowDays + 'd columns cover fewer days than their label. Counters marked ' +
-        '<span class="partial">*</span> have no data before the date shown — either they were added later, ' +
-        'or the event simply had not fired yet.')
-    }
     if (!msgs.length) return ''
     return msgs.map(function (m) {
       return '<div class="warning"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div>' + m + '</div></div>'
