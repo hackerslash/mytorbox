@@ -3,7 +3,7 @@ const { getJson } = require('./httpUtils')
 const redis = require('./redisClient')
 const stats = require('./stats')
 const { mapLimit } = require('./concurrency')
-const { normalizeTitle } = require('./tmdb')
+const { normalizeTitle, stripStudioPrefix } = require('./tmdb')
 const {
   CINEMETA_BASE,
   CINEMETA_CACHE_TTL_SECONDS,
@@ -191,6 +191,16 @@ function titleMatches(candidate, title) {
   return editDistance(a, b) <= budget
 }
 
+async function catalogSearch(title, year, type) {
+  const url = `${CINEMETA_BASE}/catalog/${type}/top/search=${encodeURIComponent(title)}.json`
+  const data = await getJson(url)
+  const metas = (data && data.metas) || []
+  const byYear = year ? metas.filter((m) => String(m.releaseInfo || '').startsWith(String(year))) : []
+  const pool = byYear.length ? byYear : metas
+  const chosen = pool.find((m) => titleMatches(m.name, title))
+  return chosen && IMDB_ID_RE.test(chosen.id || '') ? chosen.id : null
+}
+
 async function searchImdbId(rawTitle, year, type) {
   const title = String(rawTitle || '')
     .split(/\s+a\.?k\.?a\.?\s+/i)[0]
@@ -208,13 +218,11 @@ async function searchImdbId(rawTitle, year, type) {
 
   let imdbId = null
   try {
-    const url = `${CINEMETA_BASE}/catalog/${type}/top/search=${encodeURIComponent(title)}.json`
-    const data = await getJson(url)
-    const metas = (data && data.metas) || []
-    const byYear = year ? metas.filter((m) => String(m.releaseInfo || '').startsWith(String(year))) : []
-    const pool = byYear.length ? byYear : metas
-    const chosen = pool.find((m) => titleMatches(m.name, title))
-    if (chosen && IMDB_ID_RE.test(chosen.id || '')) imdbId = chosen.id
+    imdbId = await catalogSearch(title, year, type)
+    if (!imdbId) {
+      const stripped = stripStudioPrefix(title)
+      if (stripped && stripped !== title) imdbId = await catalogSearch(stripped, year, type)
+    }
     stats.track(imdbId ? 'cinemeta:search_hit' : 'cinemeta:search_miss')
   } catch {
     stats.track('cinemeta:search_error')

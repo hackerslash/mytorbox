@@ -89,10 +89,19 @@ async function searchOnce(title, year, kind, apiKey) {
   return pickBest((data && data.results) || [], title)
 }
 
+const STUDIO_PREFIX_RE =
+  /^(?:marvel studios|walt disney(?: pictures| animation studios)?|dreamworks(?: animation)?|pixar)['’]?\s+(?=\S)/i
+
+function stripStudioPrefix(title) {
+  return String(title || '').replace(STUDIO_PREFIX_RE, '').trim()
+}
+
 function titleVariants(title, kind) {
   const variants = []
   const aka = title.split(/\s+a\.?k\.?a\.?\s+/i)
   if (aka.length > 1) variants.push(aka[0].trim(), aka[1].trim())
+  const withoutStudio = stripStudioPrefix(title)
+  if (withoutStudio !== title) variants.push(withoutStudio)
   const withoutYear = title.replace(/\s+(?:19|20)\d{2}$/, '').trim()
   if (withoutYear !== title) variants.push(withoutYear)
   if (kind === 'tv') {
@@ -224,4 +233,4 @@ function clearCache() {
   findCache.clear()
 }
 
-module.exports = { search, posterUrl, getDetails, findByImdbId, clearCache, normalizeTitle }
+module.exports = { search, posterUrl, getDetails, findByImdbId, clearCache, normalizeTitle, titleVariants, stripStudioPrefix }
