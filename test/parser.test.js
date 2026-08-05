@@ -160,3 +160,24 @@ test('a season from the filename marker is not overridden by the torrent title s
   assert.equal(w.season, 1)
   assert.deepEqual(w.episodes, [1])
 })
+
+test('collapses a duplicated year left in the title', () => {
+  const w = parseOne('Pressure.2026.2026.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo.mkv')
+  assert.equal(w.title, 'Pressure')
+  assert.equal(w.year, 2026)
+  assert.equal(w.isEpisode, false)
+})
+
+test('a leading list number on a bonus feature is not an episode', () => {
+  const w = parseOne('09) Shattered by Silence.mkv')
+  assert.equal(w.isEpisode, false)
+  assert.equal(w.season, null)
+  assert.deepEqual(w.episodes, [])
+})
+
+test('a numeric movie title with a year is not read as a season/episode', () => {
+  const w = parseOne('Crime.101.2026.1080p.WEBRip.x264.AAC5.1-[YTS.BZ].mp4')
+  assert.equal(w.title, 'Crime 101')
+  assert.equal(w.year, 2026)
+  assert.equal(w.isEpisode, false)
+})
