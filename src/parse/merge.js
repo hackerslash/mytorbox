@@ -38,13 +38,21 @@ function mergeParsed(parsed) {
   const { guessit = null, ptt = null, anitomy = null } = byParser
   const ordered = [guessit, ptt, anitomy].filter(Boolean)
 
-  let title = null
-  for (const source of [guessit, anitomy, ptt]) {
-    if (source && plausibleTitle(source.title)) {
-      title = extendNumericTitle(source.title, ptt && ptt.title).replace(/\s+/g, ' ')
-      break
-    }
+  const norm = (t) => (t || '').toLowerCase().replace(/[^a-z0-9]+/g, '')
+  let chosen = [guessit, anitomy, ptt].find((s) => s && plausibleTitle(s.title)) || null
+  if (
+    guessit &&
+    plausibleTitle(guessit.title) &&
+    ptt &&
+    anitomy &&
+    plausibleTitle(ptt.title) &&
+    norm(ptt.title) === norm(anitomy.title) &&
+    norm(guessit.title) !== norm(ptt.title) &&
+    !norm(guessit.title).startsWith(norm(ptt.title))
+  ) {
+    chosen = ptt
   }
+  const title = chosen ? extendNumericTitle(chosen.title, ptt && ptt.title).replace(/\s+/g, ' ') : null
 
   const year = pick(ordered, 'year')
   const trusted = ordered.filter((s) => !danglingTitle(s.title))

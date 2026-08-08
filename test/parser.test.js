@@ -195,6 +195,12 @@ test('the pack index year wins over a year embedded in the title', () => {
   assert.equal(w.isEpisode, false)
 })
 
+test('two parsers agreeing on the title outvote guessit dropping the lead word', () => {
+  const w = parseOne('www.1TamilMV.Pizza - DC (2026) Tamil HQ PreDVD - 1080p - x264 - HQ Clean - AAC.mkv')
+  assert.equal(w.title, 'DC')
+  assert.equal(w.year, 2026)
+})
+
 test('a numeric movie title with a year is not read as a season/episode', () => {
   const w = parseOne('Crime.101.2026.1080p.WEBRip.x264.AAC5.1-[YTS.BZ].mp4')
   assert.equal(w.title, 'Crime 101')
