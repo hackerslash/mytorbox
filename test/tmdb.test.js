@@ -21,3 +21,10 @@ test('offers a studio-stripped search variant on the retry chain', () => {
   assert.deepEqual(titleVariants("Marvel Studios' Black Widow", 'movie'), ['Black Widow'])
   assert.deepEqual(titleVariants('Black Widow', 'movie'), [])
 })
+
+test('offers the leading Cyrillic run first, dropping the Latin/junk tail', () => {
+  assert.deepEqual(titleVariants('Донни Дарко DC', 'movie'), ['Донни Дарко'])
+  assert.deepEqual(titleVariants('Извне From Сезон 1 Серии 1-10', 'tv'), ['Извне'])
+  assert.equal(titleVariants('Перемещение В движении Moving Mubing Сезон 1 Серии 1', 'tv')[0], 'Перемещение В движении')
+  assert.equal(titleVariants('Black Widow', 'movie').length, 0)
+})

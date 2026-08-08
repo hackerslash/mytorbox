@@ -96,8 +96,18 @@ function stripStudioPrefix(title) {
   return String(title || '').replace(STUDIO_PREFIX_RE, '').trim()
 }
 
+function leadingCyrillic(title) {
+  const trimmed = title.trim()
+  const m = /^[Ѐ-ӿ][Ѐ-ӿ\s]*/.exec(trimmed)
+  if (!m) return null
+  const v = m[0].replace(/\s+(?:Сезон|Сери[ия])\s.*$/i, '').trim()
+  return v && v !== trimmed ? v : null
+}
+
 function titleVariants(title, kind) {
   const variants = []
+  const cyrillic = leadingCyrillic(title)
+  if (cyrillic) variants.push(cyrillic)
   const aka = title.split(/\s+a\.?k\.?a\.?\s+/i)
   if (aka.length > 1) variants.push(aka[0].trim(), aka[1].trim())
   const withoutStudio = stripStudioPrefix(title)
