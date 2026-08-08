@@ -114,6 +114,10 @@ function titleVariants(title, kind) {
   if (withoutStudio !== title) variants.push(withoutStudio)
   const withoutYear = title.replace(/\s+(?:19|20)\d{2}$/, '').trim()
   if (withoutYear !== title) variants.push(withoutYear)
+  const partExpanded = title.replace(/\b(?:p|pt)(\d{1,2})\b/i, 'Part $1')
+  if (partExpanded !== title) variants.push(partExpanded)
+  const withoutFormat = title.replace(/\s+(?:3d|h?sbs|half[\s-]?sbs|full[\s-]?sbs|hou|imax)\b/gi, '').trim()
+  if (withoutFormat !== title) variants.push(withoutFormat)
   if (kind === 'tv') {
     const withoutTrailingNumber = title.replace(/\s+\d{1,2}$/, '').trim()
     if (withoutTrailingNumber !== title && withoutTrailingNumber.length > 3) {

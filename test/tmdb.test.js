@@ -22,6 +22,18 @@ test('offers a studio-stripped search variant on the retry chain', () => {
   assert.deepEqual(titleVariants('Black Widow', 'movie'), [])
 })
 
+test('expands a P<n>/Pt<n> part abbreviation as a variant, keeping the number', () => {
+  assert.ok(titleVariants('The Godfather P1', 'movie').includes('The Godfather Part 1'))
+  assert.ok(titleVariants('The Godfather Pt2', 'movie').includes('The Godfather Part 2'))
+  assert.deepEqual(titleVariants('The Godfather', 'movie'), [])
+})
+
+test('offers a format-stripped variant for 3D/SBS tags', () => {
+  assert.ok(titleVariants('Black Adam 3D', 'movie').includes('Black Adam'))
+  assert.ok(titleVariants('Avatar Half-SBS', 'movie').includes('Avatar'))
+  assert.deepEqual(titleVariants('Black Adam', 'movie'), [])
+})
+
 test('offers the leading Cyrillic run first, dropping the Latin/junk tail', () => {
   assert.deepEqual(titleVariants('Донни Дарко DC', 'movie'), ['Донни Дарко'])
   assert.deepEqual(titleVariants('Извне From Сезон 1 Серии 1-10', 'tv'), ['Извне'])
