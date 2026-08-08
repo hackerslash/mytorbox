@@ -1,6 +1,6 @@
 const { isVideo } = require('../torbox')
 const { MIN_FILE_SIZE_BYTES } = require('../config')
-const { cleanName, isJunkFile } = require('./normalize')
+const { cleanName, isJunkFile, packIndexParse } = require('./normalize')
 const {
   EPISODE_MARKER_RE,
   namesTheSeries,
@@ -23,10 +23,11 @@ function* parseWorkItems(source, entry, resolver = DIRECT_RESOLVER) {
 
     const cleaned = cleanName(name)
     const parsed = resolver.resolve(cleaned)
+    const pack = packIndexParse(name)
 
-    let title = parsed.title
-    let year = parsed.year
-    let isEpisode = parsed.isEpisode
+    let title = pack ? pack.title : parsed.title
+    let year = pack ? pack.year : parsed.year
+    let isEpisode = pack ? false : parsed.isEpisode
     let explicitSeason = isEpisode ? parsed.season : null
     let season = isEpisode ? parsed.season ?? 1 : null
     let episodes = isEpisode ? parsed.episodes : []

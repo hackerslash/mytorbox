@@ -15,6 +15,11 @@ const AUDIO_CHANNELS_RE =
 const GLUED_RESOLUTION_RE = /\b(4k|uhd)[a-z]*?(?:2160|1080)\b/gi
 const GLUED_EPISODE_MARKER_RE = /([Ss]\d{1,2}[Ee]\d{1,3})(?=[A-Za-z])/g
 const REPEATED_YEAR_RE = /\b((?:19|20)\d{2})[\s._-]+\1\b/g
+const TECH_TOKEN =
+  '\\d{3,4}[pi]|\\d{3,4}x\\d{3,4}|4k|uhd|hd|sd|bluray|blu-ray|bdrip|bdremux|brrip|dvdrip|hdrip|web|webrip|web-?dl|hdtv|remux|x26[45]|h[.\\s_-]?26[45]|hevc|avc|av1|xvid|divx|dvd|cam|ts|tc|hdr\\w*|dv|sdr|imax|proper|repack|extended|unrated|multi|dual|10bit|truehd|atmos|dts(?:-?hd)?|ac3|e?ac3|ddp?|aac|flac'
+const POST_YEAR_TECH_RE = new RegExp(`^(?:${TECH_TOKEN})$`, 'i')
+const PACK_INDEX_RE = /^\d{1,3}[.\s_)-]+((?:19|20)\d{2})[.\s_-]+(.+)$/
+const TECH_BOUNDARY_RE = new RegExp(`[.\\s_-](?:${TECH_TOKEN})\\b`, 'i')
 
 function slugify(text) {
   const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -55,8 +60,27 @@ function stripTags(name) {
     .replace(/\([^)]*\)/g, ' ')
 }
 
+function packIndexParse(name) {
+  const m = PACK_INDEX_RE.exec(stripJunkPrefixes(name).replace(/\.[a-z0-9]{2,4}$/i, ''))
+  if (!m) return null
+  const rest = m[2]
+  const firstToken = rest.split(/[.\s_-]/, 1)[0]
+  if (POST_YEAR_TECH_RE.test(firstToken)) return null
+  const cut = rest.search(TECH_BOUNDARY_RE)
+  const head = cut > 0 ? rest.slice(0, cut) : rest
+  const title = head
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[._]+/g, ' ')
+    .replace(/(?<=\S)-(?=\s|$)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!title) return null
+  return { title, year: Number.parseInt(m[1], 10) }
+}
+
 function cleanName(name) {
   return stripTechnicalTokens(stripJunkPrefixes(name))
 }
 
-module.exports = { slugify, isJunkFile, stripTechnicalTokens, stripTags, cleanName }
+module.exports = { slugify, isJunkFile, stripTechnicalTokens, stripTags, cleanName, packIndexParse }

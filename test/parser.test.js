@@ -175,6 +175,26 @@ test('a leading list number on a bonus feature is not an episode', () => {
   assert.deepEqual(w.episodes, [])
 })
 
+test('a leading collection index before the year is dropped from the title', () => {
+  const w = parseOne('01.2013.Man.Of.Steel.1920x800.BDRip.x264.DTS-HD.MA.mkv')
+  assert.equal(w.title, 'Man Of Steel')
+  assert.equal(w.year, 2013)
+  assert.equal(w.isEpisode, false)
+})
+
+test('a numeric title followed by a year and technical tokens is preserved', () => {
+  const w = parseOne('10.2021.1080p.BluRay.x265.mkv')
+  assert.equal(w.title, '10')
+  assert.equal(w.year, 2021)
+})
+
+test('the pack index year wins over a year embedded in the title', () => {
+  const w = parseOne('09.2020.Wonder.Woman.1984.1920x802.BDRip.x264.TrueHD-Atmos.mkv')
+  assert.equal(w.title, 'Wonder Woman 1984')
+  assert.equal(w.year, 2020)
+  assert.equal(w.isEpisode, false)
+})
+
 test('a numeric movie title with a year is not read as a season/episode', () => {
   const w = parseOne('Crime.101.2026.1080p.WEBRip.x264.AAC5.1-[YTS.BZ].mp4')
   assert.equal(w.title, 'Crime 101')
