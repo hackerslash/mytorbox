@@ -39,7 +39,9 @@ function mergeParsed(parsed) {
   const ordered = [guessit, ptt, anitomy].filter(Boolean)
 
   const norm = (t) => (t || '').toLowerCase().replace(/[^a-z0-9]+/g, '')
-  let chosen = [guessit, anitomy, ptt].find((s) => s && plausibleTitle(s.title)) || null
+  const year = pick(ordered, 'year')
+  const byTitlePref = [guessit, anitomy, ptt]
+  let chosen = byTitlePref.find((s) => s && plausibleTitle(s.title)) || null
   if (
     guessit &&
     plausibleTitle(guessit.title) &&
@@ -52,9 +54,11 @@ function mergeParsed(parsed) {
   ) {
     chosen = ptt
   }
+  if (!chosen && year != null) {
+    chosen = byTitlePref.find((s) => s && /^[a-z0-9]$/i.test((s.title || '').trim())) || null
+  }
   const title = chosen ? extendNumericTitle(chosen.title, ptt && ptt.title).replace(/\s+/g, ' ') : null
 
-  const year = pick(ordered, 'year')
   const trusted = ordered.filter((s) => !danglingTitle(s.title))
   let episodes = []
   for (const source of trusted) {

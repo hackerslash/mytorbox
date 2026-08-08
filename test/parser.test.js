@@ -201,6 +201,13 @@ test('two parsers agreeing on the title outvote guessit dropping the lead word',
   assert.equal(w.year, 2026)
 })
 
+test('a single-letter title is kept when a year is present', () => {
+  const w = parseOne('M (1931) Criterion BDRip 1080p x264 DD 1.0-HighCode.mkv')
+  assert.equal(w.title, 'M')
+  assert.equal(w.year, 1931)
+  assert.equal(w.isEpisode, false)
+})
+
 test('a numeric movie title with a year is not read as a season/episode', () => {
   const w = parseOne('Crime.101.2026.1080p.WEBRip.x264.AAC5.1-[YTS.BZ].mp4')
   assert.equal(w.title, 'Crime 101')
