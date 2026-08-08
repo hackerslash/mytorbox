@@ -291,7 +291,7 @@ app.get('/favicon.ico', (req, res) => {
   res.type('image/png').sendFile(LOGO_PATH)
 })
 
-const ROBOTS_TXT = 'User-agent: *\nDisallow: /\n'
+const ROBOTS_TXT = 'User-agent: *\nAllow: /$\nAllow: /configure\nDisallow: /\n'
 
 app.get('/robots.txt', (req, res) => {
   res.set('Cache-Control', 'public, max-age=86400')
