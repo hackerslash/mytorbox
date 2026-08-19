@@ -28,6 +28,7 @@ function* parseWorkItems(source, entry, resolver = DIRECT_RESOLVER) {
     let title = pack ? pack.title : parsed.title
     let year = pack ? pack.year : parsed.year
     let isEpisode = pack ? false : parsed.isEpisode
+    if (isEpisode && !parsed.episodes.length && parsed.season > 62) isEpisode = false
     let explicitSeason = isEpisode ? parsed.season : null
     let season = isEpisode ? parsed.season ?? 1 : null
     let episodes = isEpisode ? parsed.episodes : []

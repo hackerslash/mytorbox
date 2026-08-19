@@ -31,7 +31,7 @@ function isJunkFile(name) {
 }
 
 function stripJunkPrefixes(name) {
-  let cleaned = name
+  let cleaned = name.replace(/\s/g, ' ')
   let changed = true
   while (changed) {
     changed = false

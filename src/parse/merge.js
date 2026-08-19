@@ -25,6 +25,16 @@ function extendNumericTitle(title, alt) {
   return a !== t && a.startsWith(t) ? a : t
 }
 
+const VOLUME_SUFFIX_RE = /^[\s._-]*(?:vol|volume|part|pt|chapter|book)\b/i
+
+function extendVolumeTitle(title, alt) {
+  const t = title.trim()
+  if (typeof alt !== 'string') return t
+  const a = alt.trim()
+  if (a.length <= t.length || !a.toLowerCase().startsWith(t.toLowerCase())) return t
+  return VOLUME_SUFFIX_RE.test(a.slice(t.length)) ? a : t
+}
+
 function pick(sources, field) {
   for (const source of sources) {
     if (source[field] != null) return source[field]
@@ -57,7 +67,9 @@ function mergeParsed(parsed) {
   if (!chosen && year != null) {
     chosen = byTitlePref.find((s) => s && /^[a-z0-9]$/i.test((s.title || '').trim())) || null
   }
-  const title = chosen ? extendNumericTitle(chosen.title, ptt && ptt.title).replace(/\s+/g, ' ') : null
+  const title = chosen
+    ? extendVolumeTitle(extendNumericTitle(chosen.title, ptt && ptt.title), ptt && ptt.title).replace(/\s+/g, ' ')
+    : null
 
   const trusted = ordered.filter((s) => !danglingTitle(s.title))
   let episodes = []
