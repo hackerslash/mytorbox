@@ -18,10 +18,10 @@ jobs:
 
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.x
+          deno-version: 2.7.13
 
       - name: Deploy the pushed commit
         env:
           DENO_DEPLOY_TOKEN: ${{ secrets.DENO_DEPLOY_TOKEN }}
         run: |
-          deno deploy . --org hackerslash --app mytorbox --prod --json --non-interactive
+          deno deploy --org hackerslash --app mytorbox --prod --json --non-interactive
