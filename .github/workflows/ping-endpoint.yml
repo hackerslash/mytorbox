@@ -1,0 +1,24 @@
+name: Ping endpoint
+
+# Hits the live catalog endpoint every 6 hours so failures show up as a red
+# Actions run (GitHub emails the repo owner by default), and keeps the
+# TorBox/TMDB/parse caches warm instead of cliff-expiring at their 30-day TTL.
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request catalog
+        env:
+          URL: ${{ secrets.MYTORBOX_CATALOG_URL }}
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' -m 30 \
+            -H 'Referer: https://web.stremio.com/' \
+            -H 'User-Agent: Mozilla/5.0 (compatible; mytorbox-uptime-check)' \
+            "$URL")
+          echo "HTTP $status"
+          [ "$status" = "200" ]
