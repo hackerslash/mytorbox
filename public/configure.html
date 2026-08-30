@@ -713,6 +713,66 @@
     padding: var(--sp-4) 0;
   }
 
+  #cs-picker, #cs-selected { margin-bottom: var(--sp-3); }
+
+  #cs-results {
+    margin-top: var(--sp-2);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 264px;
+    overflow-y: auto;
+  }
+
+  #cs-results:empty { display: none; }
+
+  button.cs-item {
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-color: transparent;
+    background: none;
+  }
+
+  button.cs-item:hover, button.cs-item:focus-visible { background: var(--bg-2); border-color: var(--border); }
+
+  .cs-searching { font-size: var(--fs-xs); color: var(--text-2); padding: var(--sp-2); }
+
+  .cs-manual-hint {
+    font-size: var(--fs-xs);
+    color: var(--text-2);
+    padding: var(--sp-2);
+    line-height: 1.5;
+  }
+
+  .cs-manual-hint button {
+    font: inherit;
+    color: var(--violet-soft);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  #cs-selected .cs-item-change {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text-2);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+
+  #cs-selected .cs-item-change:hover { color: var(--text-0); border-color: var(--text-2); }
+
+  #cs-selected select.plain { margin-top: 4px; }
+
   #custom-streams-section.disabled {
     opacity: 0.5;
     pointer-events: none;
@@ -930,7 +990,7 @@
           <span class="tag c-amber">06</span>
           <div>
             <label>Custom Streams</label>
-            <p class="section-hint">Add your own stream URL — with an IMDb id it gets proper posters/metadata, without one it still shows up under its title alone. Appears as a separate catalogue in Stremio and deletes itself when its TTL runs out.</p>
+            <p class="section-hint">Add your own stream URL — search for the movie or series it belongs to and it gets proper posters/metadata, or give it any title of your own if it isn't listed. Appears as a separate catalogue in Stremio and deletes itself when its TTL runs out.</p>
           </div>
         </div>
 
@@ -938,13 +998,11 @@
           <button class="btn" id="cs-toggle-btn" type="button" onclick="toggleCustomStreamForm()">+ Add Custom Stream</button>
 
           <div id="cs-add-form" style="display: none; margin-top: var(--sp-4);">
-            <div class="cs-row">
-              <input type="text" class="plain" id="cs-imdb" placeholder="IMDb id, e.g. tt1234567 (optional)">
-              <select class="plain" id="cs-type" onchange="onCustomTypeChange()">
-                <option value="movie">Movie</option>
-                <option value="series">Series</option>
-              </select>
+            <div id="cs-picker">
+              <input type="text" class="plain" id="cs-search" placeholder="Search a movie or series…" autocomplete="off" oninput="onCustomSearchInput()">
+              <div id="cs-results"></div>
             </div>
+            <div id="cs-selected" style="display: none;"></div>
             <div class="cs-row" id="cs-episode-fields" style="display: none;">
               <input type="number" class="plain" id="cs-season" placeholder="Season" min="0">
               <input type="number" class="plain" id="cs-episode" placeholder="Episode" min="1">
@@ -953,7 +1011,6 @@
               <input type="text" class="plain" id="cs-url" placeholder="https://... direct stream URL">
             </div>
             <div class="cs-row">
-              <input type="text" class="plain" id="cs-title" placeholder="Title (required if no IMDb id)">
               <select class="plain" id="cs-ttl">
                 <option value="1800">Expires in 30m</option>
                 <option value="3600">Expires in 1h</option>
@@ -1202,9 +1259,158 @@ function getConfigValues() {
   };
 }
 
-function onCustomTypeChange() {
-  const isSeries = document.getElementById('cs-type').value === 'series';
-  document.getElementById('cs-episode-fields').style.display = isSeries ? 'flex' : 'none';
+let csSelection = null;
+let csSearchTimer = null;
+let csSearchSeq = 0;
+
+function posterNode(url) {
+  if (url) {
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    return img;
+  }
+  const placeholder = document.createElement('div');
+  placeholder.className = 'cs-item-poster-placeholder';
+  placeholder.innerHTML = ICON_IMAGE;
+  return placeholder;
+}
+
+function onCustomSearchInput() {
+  clearTimeout(csSearchTimer);
+  csSearchTimer = setTimeout(runCustomSearch, 350);
+}
+
+async function runCustomSearch() {
+  const query = document.getElementById('cs-search').value.trim();
+  const results = document.getElementById('cs-results');
+  const seq = ++csSearchSeq;
+
+  if (query.length < 2) {
+    results.innerHTML = '';
+    return;
+  }
+  results.innerHTML = '<div class="cs-searching">Searching…</div>';
+
+  const { tmdb } = getConfigValues();
+  let items = [];
+  try {
+    const res = await fetch('/api/custom-streams/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tmdb_key: tmdb, query }),
+    });
+    const data = await res.json();
+    if (data.ok) items = data.results;
+  } catch {
+    // fall through to the manual-title escape hatch
+  }
+  if (seq !== csSearchSeq) return;
+  renderCustomSearchResults(items, query);
+}
+
+function renderCustomSearchResults(items, query) {
+  const results = document.getElementById('cs-results');
+  results.innerHTML = '';
+
+  for (const item of items) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'cs-item';
+    row.appendChild(posterNode(item.poster));
+
+    const info = document.createElement('div');
+    info.className = 'cs-item-info';
+    const name = document.createElement('div');
+    name.className = 'cs-item-name';
+    name.textContent = item.title;
+    const meta = document.createElement('div');
+    meta.className = 'cs-item-meta';
+    meta.textContent = [item.type === 'series' ? 'Series' : 'Movie', item.year].filter(Boolean).join(' · ');
+    info.append(name, meta);
+    row.appendChild(info);
+
+    row.addEventListener('click', () => selectCustomTitle(item));
+    results.appendChild(row);
+  }
+
+  const hint = document.createElement('div');
+  hint.className = 'cs-manual-hint';
+  hint.textContent = items.length ? 'Not listed? ' : 'Nothing found. ';
+  const manual = document.createElement('button');
+  manual.type = 'button';
+  manual.textContent = `Use “${query}” as a custom title`;
+  manual.addEventListener('click', () => selectCustomTitle({ title: query, type: 'movie', manual: true }));
+  hint.appendChild(manual);
+  results.appendChild(hint);
+}
+
+function selectCustomTitle(item) {
+  csSelection = item;
+  renderCustomSelection();
+}
+
+function clearCustomSelection() {
+  csSelection = null;
+  csSearchSeq++;
+  document.getElementById('cs-search').value = '';
+  document.getElementById('cs-results').innerHTML = '';
+  renderCustomSelection();
+}
+
+function setCustomType(type) {
+  csSelection.type = type;
+  document.getElementById('cs-episode-fields').style.display = type === 'series' ? 'flex' : 'none';
+}
+
+function renderCustomSelection() {
+  const picker = document.getElementById('cs-picker');
+  const selected = document.getElementById('cs-selected');
+  const episodeFields = document.getElementById('cs-episode-fields');
+
+  selected.innerHTML = '';
+  picker.style.display = csSelection ? 'none' : 'block';
+  selected.style.display = csSelection ? 'block' : 'none';
+  episodeFields.style.display = csSelection && csSelection.type === 'series' ? 'flex' : 'none';
+  if (!csSelection) return;
+
+  const item = document.createElement('div');
+  item.className = 'cs-item';
+  item.appendChild(posterNode(csSelection.poster));
+
+  const info = document.createElement('div');
+  info.className = 'cs-item-info';
+  const name = document.createElement('div');
+  name.className = 'cs-item-name';
+  name.textContent = csSelection.title;
+  info.appendChild(name);
+
+  if (csSelection.manual) {
+    const select = document.createElement('select');
+    select.className = 'plain';
+    select.innerHTML = '<option value="movie">Movie</option><option value="series">Series</option>';
+    select.value = csSelection.type;
+    select.addEventListener('change', () => setCustomType(select.value));
+    info.appendChild(select);
+  } else {
+    const meta = document.createElement('div');
+    meta.className = 'cs-item-meta';
+    meta.textContent = [csSelection.type === 'series' ? 'Series' : 'Movie', csSelection.year].filter(Boolean).join(' · ');
+    info.appendChild(meta);
+  }
+  item.appendChild(info);
+
+  const change = document.createElement('button');
+  change.type = 'button';
+  change.className = 'cs-item-change';
+  change.textContent = 'Change';
+  change.addEventListener('click', () => {
+    clearCustomSelection();
+    document.getElementById('cs-search').focus();
+  });
+  item.appendChild(change);
+
+  selected.appendChild(item);
 }
 
 function toggleCustomStreamForm() {
@@ -1213,6 +1419,7 @@ function toggleCustomStreamForm() {
   const expanded = form.style.display !== 'none';
   form.style.display = expanded ? 'none' : 'block';
   btn.textContent = expanded ? '+ Add Custom Stream' : '− Close';
+  if (!expanded) document.getElementById('cs-search').focus();
 }
 
 function formatRemaining(expiresAtMs) {
@@ -1241,17 +1448,7 @@ function renderCustomStreamsList() {
     const item = document.createElement('div');
     item.className = 'cs-item';
 
-    if (entry.poster) {
-      const img = document.createElement('img');
-      img.src = entry.poster;
-      img.alt = '';
-      item.appendChild(img);
-    } else {
-      const placeholder = document.createElement('div');
-      placeholder.className = 'cs-item-poster-placeholder';
-      placeholder.innerHTML = ICON_IMAGE;
-      item.appendChild(placeholder);
-    }
+    item.appendChild(posterNode(entry.poster));
 
     const info = document.createElement('div');
     info.className = 'cs-item-info';
@@ -1327,28 +1524,21 @@ function refreshCustomStreamsSection() {
 
 async function onAddCustomStream() {
   const { torbox, tmdb } = getConfigValues();
-  const imdbId = document.getElementById('cs-imdb').value.trim();
-  const type = document.getElementById('cs-type').value;
   const season = document.getElementById('cs-season').value;
   const episode = document.getElementById('cs-episode').value;
   const streamUrl = document.getElementById('cs-url').value.trim();
-  const title = document.getElementById('cs-title').value.trim();
   const ttlSeconds = Number(document.getElementById('cs-ttl').value);
 
   const statusEl = document.getElementById('cs-add-status');
   statusEl.classList.remove('valid', 'invalid');
   statusEl.innerHTML = '';
 
-  if (imdbId && !/^tt\d+$/.test(imdbId)) {
+  if (!csSelection) {
     statusEl.classList.add('invalid');
-    statusEl.innerHTML = `${ICON_CROSS}<span>IMDb id must look like tt1234567</span>`;
+    statusEl.innerHTML = `${ICON_CROSS}<span>Search and pick a title first</span>`;
     return;
   }
-  if (!imdbId && !title) {
-    statusEl.classList.add('invalid');
-    statusEl.innerHTML = `${ICON_CROSS}<span>Provide an IMDb id, or a title if there isn't one</span>`;
-    return;
-  }
+  const type = csSelection.type;
   if (!/^https?:\/\/.+/i.test(streamUrl)) {
     statusEl.classList.add('invalid');
     statusEl.innerHTML = `${ICON_CROSS}<span>Stream URL must start with http(s)://</span>`;
@@ -1370,8 +1560,8 @@ async function onAddCustomStream() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         torbox_key: torbox, tmdb_key: tmdb,
-        type, imdb_id: imdbId || null, season: season ? Number(season) : null, episode: episode ? Number(episode) : null,
-        stream_url: streamUrl, title: title || null, ttl_seconds: ttlSeconds,
+        type, tmdb_id: csSelection.tmdb_id || null, season: season ? Number(season) : null, episode: episode ? Number(episode) : null,
+        stream_url: streamUrl, title: csSelection.title, ttl_seconds: ttlSeconds,
       }),
     });
     const data = await res.json();
@@ -1382,11 +1572,10 @@ async function onAddCustomStream() {
     }
     statusEl.classList.add('valid');
     statusEl.innerHTML = `${ICON_CHECK}<span>Added</span>`;
-    document.getElementById('cs-imdb').value = '';
     document.getElementById('cs-url').value = '';
-    document.getElementById('cs-title').value = '';
     document.getElementById('cs-season').value = '';
     document.getElementById('cs-episode').value = '';
+    clearCustomSelection();
     loadCustomStreams();
     setTimeout(toggleCustomStreamForm, 700);
   } catch (err) {

@@ -214,10 +214,23 @@ app.post('/api/custom-streams/list', kind('custom:list'), rateLimit('customStrea
   res.json({ ok: true, entries: enriched })
 })
 
+app.post('/api/custom-streams/search', kind('custom:search'), rateLimit('customStreamRead', RATE_LIMITS.customStreamRead), async (req, res) => {
+  const { tmdb_key: tmdbKey, query } = req.body || {}
+  if (!tmdbKey) {
+    return res.status(400).json({ ok: false, error: 'tmdb_key is required' })
+  }
+  const q = typeof query === 'string' ? query.trim().slice(0, 200) : ''
+  if (q.length < 2) return res.json({ ok: true, results: [] })
+  const results = await tmdb.searchMulti(q, tmdbKey)
+  stats.track('custom:search')
+  if (!results.length) stats.track('custom:search_empty')
+  res.json({ ok: true, results })
+})
+
 app.post('/api/custom-streams/add', kind('custom:add'), rateLimit('customStreamWrite', RATE_LIMITS.customStreamWrite), async (req, res) => {
   const {
     torbox_key: torboxKey, tmdb_key: tmdbKey,
-    type, imdb_id: imdbId, season, episode, stream_url: streamUrl, title, ttl_seconds: ttlSeconds,
+    type, imdb_id: imdbId, tmdb_id: tmdbId, season, episode, stream_url: streamUrl, title, ttl_seconds: ttlSeconds,
   } = req.body || {}
 
   if (!torboxKey || !tmdbKey) {
@@ -230,7 +243,16 @@ app.post('/api/custom-streams/add', kind('custom:add'), rateLimit('customStreamW
   if (imdbId && !customStreams.isValidImdbId(imdbId)) {
     return res.status(400).json({ ok: false, error: 'imdb_id must look like ttNNNNNNN' })
   }
-  if (!imdbId && !trimmedTitle) {
+  let resolvedImdbId = imdbId || null
+  if (!resolvedImdbId && tmdbId !== undefined && tmdbId !== null) {
+    const tmdbIdNum = Number(tmdbId)
+    if (!Number.isInteger(tmdbIdNum) || tmdbIdNum < 1) {
+      return res.status(400).json({ ok: false, error: 'tmdb_id must be a positive integer' })
+    }
+    const details = await tmdb.getDetails(type === 'series' ? 'tv' : 'movie', tmdbIdNum, tmdbKey).catch(() => null)
+    resolvedImdbId = (details && details.imdbId) || null
+  }
+  if (!resolvedImdbId && !trimmedTitle) {
     return res.status(400).json({ ok: false, error: 'Provide an IMDb id, or a title if there isn\'t one' })
   }
   if (!customStreams.isValidStreamUrl(streamUrl)) {
@@ -262,7 +284,7 @@ app.post('/api/custom-streams/add', kind('custom:add'), rateLimit('customStreamW
   }
 
   const entry = await customStreams.addCustomStream(torboxKey, tmdbKey, {
-    type, imdbId: imdbId || null, season: seasonNum, episode: episodeNum, streamUrl, title: trimmedTitle || null, ttlMs,
+    type, imdbId: resolvedImdbId, season: seasonNum, episode: episodeNum, streamUrl, title: trimmedTitle || null, ttlMs,
   })
   if (!entry) {
     return res.status(400).json({ ok: false, error: 'Custom stream limit reached, or storage is not configured' })

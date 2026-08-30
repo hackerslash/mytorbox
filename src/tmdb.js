@@ -13,6 +13,7 @@ const stats = require('./stats')
 const cache = new Map()
 const detailsCache = new Map()
 const findCache = new Map()
+const multiCache = new Map()
 async function cachedLookup(ns, l1, l1key, fetchFn) {
   if (l1.has(l1key)) {
     stats.track('tmdb:hit_memory')
@@ -241,10 +242,32 @@ async function findByImdbId(imdbId, apiKey) {
   })
 }
 
+async function searchMulti(query, apiKey) {
+  return cachedLookup('m', multiCache, query.trim().toLowerCase(), async () => {
+    try {
+      const params = new URLSearchParams({ api_key: apiKey, query, include_adult: 'false' })
+      const data = await getJson(`${TMDB_BASE}/search/multi?${params.toString()}`)
+      return ((data && data.results) || [])
+        .filter((r) => (r.media_type === 'movie' || r.media_type === 'tv') && (r.title || r.name))
+        .slice(0, 8)
+        .map((r) => ({
+          tmdb_id: r.id,
+          type: r.media_type === 'tv' ? 'series' : 'movie',
+          title: r.title || r.name,
+          year: yearOf(r.release_date || r.first_air_date),
+          poster: posterUrl(r),
+        }))
+    } catch {
+      return []
+    }
+  })
+}
+
 function clearCache() {
   cache.clear()
   detailsCache.clear()
   findCache.clear()
+  multiCache.clear()
 }
 
-module.exports = { search, posterUrl, getDetails, findByImdbId, clearCache, normalizeTitle, titleVariants, stripStudioPrefix }
+module.exports = { search, searchMulti, posterUrl, getDetails, findByImdbId, clearCache, normalizeTitle, titleVariants, stripStudioPrefix }

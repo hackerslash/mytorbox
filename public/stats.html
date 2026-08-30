@@ -818,6 +818,8 @@
     var custom = kv([
       ['Live entries', n(cs.entries)],
       ['Users with entries', n(cs.users)],
+      ['Title searches · 30d', n(c(p, 'custom:search'))],
+      ['— no results', n(c(p, 'custom:search_empty')), true],
       ['Added · 30d', n(c(p, 'custom:added'))],
       ['— movies / series', n(c(p, 'custom:added:movie')) + ' / ' + n(c(p, 'custom:added:series')), true],
       ['— without IMDb id', n(c(p, 'custom:added:no_imdb')), true],

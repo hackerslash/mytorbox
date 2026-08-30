@@ -6,7 +6,7 @@ A [Stremio](https://www.stremio.com/) addon that turns your [TorBox](https://tor
 
 - **Library catalog** — your TorBox torrents and web downloads, grouped by title/season/episode and matched against TMDB.
 - **Poster artwork** — TMDB by default, or swap in [RPDB](https://ratingposterdb.com/) rated posters, or any poster service addressable by IMDb id via a URL pattern like `https://btttr.cc/poster/imdb/poster-default/{imdb_id}.jpg`. RPDB and a custom URL are mutually exclusive; the custom URL wins. Applies to every catalogue, custom streams included.
-- **Custom Streams** — add your own IMDb id + direct stream URL; it shows up as a separate "Custom Streams" catalogue in Stremio and self-deletes when its TTL expires. Requires `REDIS_URL`.
+- **Custom Streams** — search TMDB for a movie or series (or type any title of your own), pair it with a direct stream URL, and it shows up as a separate "Custom Streams" catalogue in Stremio and self-deletes when its TTL expires. Requires `REDIS_URL`.
 - **Configure page** (`/configure`) — enter your keys, validate them live, and generate a personal install link for Stremio or Nuvio.
 - **Stats dashboard** (`/stats`) — admin-only view of active users, traffic, cache efficiency and library sizes, computed from the Redis keyspace. Requires `ADMIN_SECRET` and `REDIS_URL`.
 - Stateless by design: your API keys are embedded in the install URL itself, not stored server-side (see [Security](#security) below).

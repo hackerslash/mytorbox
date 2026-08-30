@@ -40,3 +40,30 @@ test('offers the leading Cyrillic run first, dropping the Latin/junk tail', () =
   assert.equal(titleVariants('Перемещение В движении Moving Mubing Сезон 1 Серии 1', 'tv')[0], 'Перемещение В движении')
   assert.equal(titleVariants('Black Widow', 'movie').length, 0)
 })
+
+test('searchMulti keeps only movie/tv results and normalizes them', async () => {
+  const { searchMulti, clearCache } = require('../src/tmdb')
+  const realFetch = global.fetch
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      results: [
+        { media_type: 'person', id: 1, name: 'Someone' },
+        { media_type: 'movie', id: 27205, title: 'Inception', release_date: '2010-07-15', poster_path: '/p.jpg' },
+        { media_type: 'tv', id: 1396, name: 'Breaking Bad', first_air_date: '2008-01-20', poster_path: null },
+      ],
+    }),
+  })
+  try {
+    clearCache()
+    const results = await searchMulti('inception', 'key')
+    assert.deepEqual(results, [
+      { tmdb_id: 27205, type: 'movie', title: 'Inception', year: '2010', poster: 'https://image.tmdb.org/t/p/w500/p.jpg' },
+      { tmdb_id: 1396, type: 'series', title: 'Breaking Bad', year: '2008', poster: null },
+    ])
+  } finally {
+    global.fetch = realFetch
+    clearCache()
+  }
+})
