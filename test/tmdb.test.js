@@ -1,3 +1,5 @@
+process.env.REDIS_URL = ''
+
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
