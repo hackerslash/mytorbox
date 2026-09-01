@@ -73,10 +73,10 @@ function libraryKey(userHash) {
 }
 
 function userHash(keys) {
-  if (!keys || !keys.torboxKey || !keys.tmdbKey) return null
+  if (!keys || !keys.tmdbKey) return null
   return crypto
     .createHash('sha256')
-    .update(`${keys.torboxKey}|${keys.tmdbKey}|`)
+    .update(`${keys.torboxKey || ''}|${keys.tmdbKey}|`)
     .digest('hex')
 }
 

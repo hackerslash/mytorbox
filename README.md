@@ -7,6 +7,7 @@ A [Stremio](https://www.stremio.com/) addon that turns your [TorBox](https://tor
 - **Library catalog** — your TorBox torrents and web downloads, grouped by title/season/episode and matched against TMDB.
 - **Poster artwork** — TMDB by default, or swap in [RPDB](https://ratingposterdb.com/) rated posters, or any poster service addressable by IMDb id via a URL pattern like `https://btttr.cc/poster/imdb/poster-default/{imdb_id}.jpg`. RPDB and a custom URL are mutually exclusive; the custom URL wins. Applies to every catalogue, custom streams included.
 - **Custom Streams** — search TMDB for a movie or series (or type any title of your own), pair it with a direct stream URL, and it shows up as a separate "Custom Streams" catalogue in Stremio and self-deletes when its TTL expires. Requires `REDIS_URL`.
+- **Custom-streams-only install** — leave the TorBox key empty and the addon installs on the TMDB key alone: the two Custom Streams catalogues, with the library catalogues, IMDb streams and Stremio search switched off.
 - **Configure page** (`/configure`) — enter your keys, validate them live, and generate a personal install link for Stremio or Nuvio.
 - **Stats dashboard** (`/stats`) — admin-only view of active users, traffic, cache efficiency and library sizes, computed from the Redis keyspace. Requires `ADMIN_SECRET` and `REDIS_URL`.
 - Stateless by design: your API keys are embedded in the install URL itself, not stored server-side (see [Security](#security) below).
@@ -44,7 +45,7 @@ If none of `TORBOX_API_KEY`/`TMDB_API_KEY` are set, every install must go throug
 
 ## Usage
 
-1. Get a [TorBox API key](https://torbox.app/settings) and a [TMDB API key](https://www.themoviedb.org/settings/api) (optionally a [RPDB key](https://ratingposterdb.com/api-key/) for rated posters).
+1. Get a [TMDB API key](https://www.themoviedb.org/settings/api), optionally a [TorBox API key](https://torbox.app/settings) for your library and a [RPDB key](https://ratingposterdb.com/api-key/) for rated posters.
 2. Open `/configure`, enter the keys, and click **Generate Install Link**.
 3. Install via the **Install in Stremio** button, or copy the manifest URL into Nuvio (`Settings → Addons → Add Addon`).
 

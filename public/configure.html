@@ -820,7 +820,7 @@
           <p class="kicker">Stremio Addon Configuration</p>
         </div>
       </div>
-      <p class="rail-desc">Generates a personal manifest URL from your TorBox and TMDB credentials. Keys are embedded client-side, nothing is persisted on this server.</p>
+      <p class="rail-desc">Generates a personal manifest URL from your TMDB key, plus a TorBox key if you want your library. Keys are embedded client-side, nothing is persisted on this server.</p>
       <nav class="rail-nav" aria-label="Sections">
         <a href="#sec-identity"><span class="tag c-violet">01</span>Identity</a>
         <a href="#sec-metadata"><span class="tag c-blue">02</span>Metadata</a>
@@ -842,8 +842,8 @@
         <div class="section-head">
           <span class="tag c-violet">01</span>
           <div>
-            <label for="torbox">TorBox API Key <span class="badge required">Required</span></label>
-            <p class="section-hint">Grants read access to your TorBox library. <a href="https://torbox.app/settings" target="_blank" rel="noopener">Get a key →</a></p>
+            <label for="torbox">TorBox API Key <span class="badge optional">Optional</span></label>
+            <p class="section-hint">Grants read access to your TorBox library. Leave it empty to install with custom streams only — no library catalogues, no search. <a href="https://torbox.app/settings" target="_blank" rel="noopener">Get a key →</a></p>
           </div>
         </div>
         <div class="input-wrap">
@@ -977,7 +977,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
             <div class="warning-body">
               <strong>Handle as a password</strong>
-              <span>Anyone with this URL can access your TorBox library.</span>
+              <span id="warning-text">Anyone with this URL can access your TorBox library.</span>
             </div>
           </div>
         </div>
@@ -1140,13 +1140,13 @@ function setFieldStatus(field, state, text) {
 async function onGenerateClick() {
   const { torbox, tmdb, rpdb, posterUrl } = getConfigValues();
 
-  if (!torbox || !tmdb) {
-    alert('TorBox and TMDB keys are required.');
+  if (!tmdb) {
+    alert('A TMDB key is required.');
     return;
   }
 
   document.getElementById('result').style.display = 'none';
-  setFieldStatus('torbox', 'checking');
+  setFieldStatus('torbox', torbox ? 'checking' : 'idle');
   setFieldStatus('tmdb', 'checking');
   if (rpdb) setFieldStatus('rpdb', 'checking'); else setFieldStatus('rpdb', 'idle');
   if (posterUrl) setFieldStatus('poster-url', 'checking'); else setFieldStatus('poster-url', 'idle');
@@ -1159,7 +1159,7 @@ async function onGenerateClick() {
     const res = await fetch('/api/validate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null, poster_url: posterUrl || null }),
+      body: JSON.stringify({ torbox_key: torbox || null, tmdb_key: tmdb, rpdb_key: rpdb || null, poster_url: posterUrl || null }),
     });
 
     // Prefer the server's message (e.g. rate-limit "Too many requests...") over a bare HTTP code.
@@ -1169,7 +1169,9 @@ async function onGenerateClick() {
       throw new Error((result && result.error) || `Validation request failed (HTTP ${res.status})`);
     }
 
-    setFieldStatus('torbox', result.torbox.valid ? 'valid' : 'invalid', result.torbox.detail);
+    if (result.torbox) {
+      setFieldStatus('torbox', result.torbox.valid ? 'valid' : 'invalid', result.torbox.detail);
+    }
     setFieldStatus('tmdb', result.tmdb.valid ? 'valid' : 'invalid', result.tmdb.detail);
     if (result.rpdb) {
       setFieldStatus('rpdb', result.rpdb.valid ? 'valid' : 'invalid', result.rpdb.detail);
@@ -1178,7 +1180,7 @@ async function onGenerateClick() {
       setFieldStatus('poster-url', result.poster.valid ? 'valid' : 'invalid', result.poster.detail);
     }
 
-    const allValid = result.torbox.valid && result.tmdb.valid
+    const allValid = (!result.torbox || result.torbox.valid) && result.tmdb.valid
       && (!result.rpdb || result.rpdb.valid)
       && (!result.poster || result.poster.valid);
     if (allValid) {
@@ -1205,7 +1207,8 @@ function toBase64Url(obj) {
 }
 
 function buildAndShowLink(torbox, tmdb, rpdb, posterUrl) {
-  const payload = { torbox_key: torbox, tmdb_key: tmdb };
+  const payload = { tmdb_key: tmdb };
+  if (torbox) payload.torbox_key = torbox;
   if (rpdb) payload.rpdb_key = rpdb;
   if (posterUrl) payload.poster_url = posterUrl;
   if (document.getElementById('no-search').checked) payload.no_search = true;
@@ -1214,6 +1217,9 @@ function buildAndShowLink(torbox, tmdb, rpdb, posterUrl) {
 
   document.getElementById('result-url').value = manifestUrl;
   document.getElementById('stremio-link').href = `stremio://${location.host}/${config}/manifest.json`;
+  document.getElementById('warning-text').textContent = torbox
+    ? 'Anyone with this URL can access your TorBox library.'
+    : 'Anyone with this URL can read and add to your custom streams.';
   document.getElementById('result').style.display = 'block';
 }
 
@@ -1496,13 +1502,13 @@ function tickCustomStreamsCountdown() {
 
 async function loadCustomStreams() {
   const { torbox, tmdb, rpdb, posterUrl } = getConfigValues();
-  if (!torbox || !tmdb) return;
+  if (!tmdb) return;
 
   try {
     const res = await fetch('/api/custom-streams/list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, rpdb_key: rpdb || null, poster_url: posterUrl || null }),
+      body: JSON.stringify({ torbox_key: torbox || null, tmdb_key: tmdb, rpdb_key: rpdb || null, poster_url: posterUrl || null }),
     });
     const data = await res.json();
     if (data.ok) {
@@ -1517,7 +1523,7 @@ async function loadCustomStreams() {
 function refreshCustomStreamsSection() {
   const { torbox, tmdb } = getConfigValues();
   const section = document.getElementById('custom-streams-section');
-  const active = Boolean(torbox && tmdb);
+  const active = Boolean(tmdb);
   section.classList.toggle('disabled', !active);
   if (active) loadCustomStreams();
 }
@@ -1559,7 +1565,7 @@ async function onAddCustomStream() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        torbox_key: torbox, tmdb_key: tmdb,
+        torbox_key: torbox || null, tmdb_key: tmdb,
         type, tmdb_id: csSelection.tmdb_id || null, season: season ? Number(season) : null, episode: episode ? Number(episode) : null,
         stream_url: streamUrl, title: csSelection.title, ttl_seconds: ttlSeconds,
       }),
@@ -1593,7 +1599,7 @@ async function onRemoveCustomStream(id) {
     const res = await fetch('/api/custom-streams/remove', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ torbox_key: torbox, tmdb_key: tmdb, id }),
+      body: JSON.stringify({ torbox_key: torbox || null, tmdb_key: tmdb, id }),
     });
     // Otherwise a failed remove (e.g. rate-limited) silently no-ops and the entry just reappears.
     if (!res.ok) {

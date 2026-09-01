@@ -138,15 +138,15 @@ app.post('/api/validate', kind('validate'), rateLimit('validate', RATE_LIMITS.va
   const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey, poster_url: posterUrl } = req.body || {}
   const poster = validators.checkPosterUrl(posterUrl)
   const [torbox, tmdb, rpdb] = await Promise.all([
-    validators.checkTorbox(torboxKey),
+    torboxKey ? validators.checkTorbox(torboxKey) : null,
     validators.checkTmdb(tmdbKey),
     poster && poster.valid ? null : validators.checkRpdb(rpdbKey),
   ])
-  stats.track(`validate:torbox:${torbox.valid ? 'ok' : 'fail'}`)
+  if (torbox) stats.track(`validate:torbox:${torbox.valid ? 'ok' : 'fail'}`)
   stats.track(`validate:tmdb:${tmdb.valid ? 'ok' : 'fail'}`)
   if (rpdb) stats.track(`validate:rpdb:${rpdb.valid ? 'ok' : 'fail'}`)
   if (poster) stats.track(`validate:poster:${poster.valid ? 'ok' : 'fail'}`)
-  if (torbox.valid && tmdb.valid) stats.trackUser({ torboxKey, tmdbKey })
+  if ((!torbox || torbox.valid) && tmdb.valid) stats.trackUser({ torboxKey, tmdbKey })
   res.json({ torbox, tmdb, rpdb, poster })
 })
 
@@ -204,8 +204,8 @@ async function enrichEntry(e, tmdbKey, provider) {
 
 app.post('/api/custom-streams/list', kind('custom:list'), rateLimit('customStreamRead', RATE_LIMITS.customStreamRead), async (req, res) => {
   const { torbox_key: torboxKey, tmdb_key: tmdbKey, rpdb_key: rpdbKey, poster_url: posterUrl } = req.body || {}
-  if (!torboxKey || !tmdbKey) {
-    return res.status(400).json({ ok: false, error: 'torbox_key and tmdb_key are required' })
+  if (!tmdbKey) {
+    return res.status(400).json({ ok: false, error: 'tmdb_key is required' })
   }
   stats.trackUser({ torboxKey, tmdbKey })
   const provider = posters.resolveProvider(posterUrl, rpdbKey)
@@ -233,8 +233,8 @@ app.post('/api/custom-streams/add', kind('custom:add'), rateLimit('customStreamW
     type, imdb_id: imdbId, tmdb_id: tmdbId, season, episode, stream_url: streamUrl, title, ttl_seconds: ttlSeconds,
   } = req.body || {}
 
-  if (!torboxKey || !tmdbKey) {
-    return res.status(400).json({ ok: false, error: 'torbox_key and tmdb_key are required' })
+  if (!tmdbKey) {
+    return res.status(400).json({ ok: false, error: 'tmdb_key is required' })
   }
   if (type !== 'movie' && type !== 'series') {
     return res.status(400).json({ ok: false, error: 'type must be "movie" or "series"' })
@@ -294,8 +294,8 @@ app.post('/api/custom-streams/add', kind('custom:add'), rateLimit('customStreamW
 
 app.post('/api/custom-streams/remove', kind('custom:remove'), rateLimit('customStreamRead', RATE_LIMITS.customStreamRead), async (req, res) => {
   const { torbox_key: torboxKey, tmdb_key: tmdbKey, id } = req.body || {}
-  if (!torboxKey || !tmdbKey || !id) {
-    return res.status(400).json({ ok: false, error: 'torbox_key, tmdb_key, and id are required' })
+  if (!tmdbKey || !id) {
+    return res.status(400).json({ ok: false, error: 'tmdb_key and id are required' })
   }
   const removed = await customStreams.removeCustomStream(torboxKey, tmdbKey, id)
   if (!removed) {

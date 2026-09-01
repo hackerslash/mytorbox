@@ -19,7 +19,7 @@ function clampTtlMs(ttlMs) {
 }
 
 function materialFor(torboxKey, tmdbKey) {
-  return `${torboxKey}|${tmdbKey}|`
+  return `${torboxKey || ''}|${tmdbKey}|`
 }
 
 function userKeyFor(torboxKey, tmdbKey) {
@@ -49,10 +49,10 @@ async function isVerifiedUser(uKey, torboxKey, tmdbKey) {
   if (cached === '1') return true
 
   const [torbox, tmdbCheck] = await Promise.all([
-    validators.checkTorbox(torboxKey),
+    torboxKey ? validators.checkTorbox(torboxKey) : null,
     validators.checkTmdb(tmdbKey),
   ])
-  const ok = torbox.valid && tmdbCheck.valid
+  const ok = (!torbox || torbox.valid) && tmdbCheck.valid
   if (ok) await redis.set(vKey, '1', 'EX', CUSTOM_STREAM_VERIFY_TTL_SECONDS)
   return ok
 }

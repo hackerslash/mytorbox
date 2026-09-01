@@ -20,17 +20,25 @@ function catalog(type, id, name, searchable = true) {
   }
 }
 
-function buildCatalogs(searchable) {
-  return [
-    catalog('movie', 'torbox-movies', 'MyTorbox Movies', searchable),
-    catalog('series', 'torbox-series', 'MyTorbox Series', searchable),
+function buildCatalogs(searchable, customStreamsOnly) {
+  const custom = [
     catalog('movie', CUSTOM_MOVIES_CATALOG_ID, 'Custom Streams', searchable),
     catalog('series', CUSTOM_SERIES_CATALOG_ID, 'Custom Streams', searchable),
   ]
+  if (customStreamsOnly) return custom
+  return [
+    catalog('movie', 'torbox-movies', 'MyTorbox Movies', searchable),
+    catalog('series', 'torbox-series', 'MyTorbox Series', searchable),
+    ...custom,
+  ]
 }
 
-function searchDisabled(cfg) {
-  return Boolean(cfg && cfg.no_search)
+function customOnly(keys) {
+  return Boolean(keys && !keys.torboxKey)
+}
+
+function searchDisabled(cfg, keys) {
+  return Boolean((cfg && cfg.no_search) || customOnly(keys))
 }
 
 const manifest = {
@@ -48,7 +56,7 @@ const manifest = {
   catalogs: buildCatalogs(true),
   idPrefixes: ['tt', 'tb:'],
   config: [
-    { key: 'torbox_key', type: 'password', title: 'TorBox API Key', required: true },
+    { key: 'torbox_key', type: 'password', title: 'TorBox API Key (leave empty for custom streams only)' },
     { key: 'tmdb_key', type: 'password', title: 'TMDB API Key', required: true },
     { key: 'rpdb_key', type: 'password', title: 'RPDB API Key (optional)' },
     { key: 'poster_url', type: 'text', title: 'Custom poster URL with {imdb_id}' },
@@ -59,6 +67,11 @@ const manifest = {
     configurationRequired: !HAS_DEFAULTS,
   },
 }
+
+// No library means nothing answers a bare IMDb id.
+const CUSTOM_ONLY_RESOURCES = manifest.resources.map((r) =>
+  r.name === 'stream' ? { ...r, idPrefixes: ['tb:'] } : r
+)
 
 function placeholderMeta(id, type, name, description) {
   const meta = { id, type, name, description }
@@ -78,9 +91,9 @@ const OUTDATED_ITEM = [
 ]
 
 function resolveKeys(cfg) {
-  if (cfg && cfg.torbox_key && cfg.tmdb_key) {
+  if (cfg && cfg.tmdb_key) {
     return {
-      torboxKey: cfg.torbox_key,
+      torboxKey: cfg.torbox_key || null,
       tmdbKey: cfg.tmdb_key,
       poster: posters.resolveProvider(cfg.poster_url, cfg.rpdb_key),
     }
@@ -132,7 +145,7 @@ async function getCatalog({ type, id, config: cfg, extra }) {
   const keys = resolveKeys(cfg)
   if (!keys) return { metas: [] }
 
-  if (searchDisabled(cfg) && extra && extra.search !== undefined) return { metas: [] }
+  if (searchDisabled(cfg, keys) && extra && extra.search !== undefined) return { metas: [] }
 
   if (id === CUSTOM_MOVIES_CATALOG_ID || id === CUSTOM_SERIES_CATALOG_ID) {
     const custom = await buildCustomCatalog(keys.torboxKey, keys.tmdbKey, keys.poster)
@@ -145,6 +158,7 @@ async function getCatalog({ type, id, config: cfg, extra }) {
     return { metas: [] }
   }
 
+  if (customOnly(keys)) return { metas: [] }
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey)
   if (type === 'movie' && id === 'torbox-movies') {
     return { metas: await cinemeta.withEnrichment(withPosters(selectMetas(lib.movies, extra), keys.poster)) }
@@ -167,6 +181,7 @@ async function getMeta({ type, id, config: cfg }) {
     return null
   }
 
+  if (customOnly(keys)) return null
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey)
   const item = lib.meta[id]
   if (item && item.type === type) {
@@ -187,6 +202,7 @@ async function getStream({ type, id, config: cfg }) {
     return { streams }
   }
 
+  if (customOnly(keys)) return null
   const lib = await getLibrary(keys.torboxKey, keys.tmdbKey)
   const entries = lib.streams[id]
   if (!entries) return null
@@ -195,9 +211,12 @@ async function getStream({ type, id, config: cfg }) {
 
 async function manifestFor(cfg) {
   const keys = resolveKeys(cfg)
+  const custom = customOnly(keys)
   return {
     ...manifest,
-    catalogs: buildCatalogs(!searchDisabled(cfg)),
+    catalogs: buildCatalogs(!searchDisabled(cfg, keys), custom),
+    resources: custom ? CUSTOM_ONLY_RESOURCES : manifest.resources,
+    idPrefixes: custom ? ['tb:'] : manifest.idPrefixes,
     behaviorHints: {
       ...manifest.behaviorHints,
       configurationRequired: !keys,
