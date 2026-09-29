@@ -34,6 +34,7 @@ Then open `http://localhost:7000/configure`.
 | `TMDB_API_KEY`   | no       | Default TMDB key, same idea.                                                                                                                                                             |
 | `RPDB_API_KEY`   | no       | Default RatingPosterDB key, same idea.                                                                                                                                                   |
 | `POSTER_URL`     | no       | Default custom poster URL pattern containing `{imdb_id}`, e.g. `https://btttr.cc/poster/imdb/poster-default/{imdb_id}.jpg`. Takes precedence over `RPDB_API_KEY`.                         |
+| `TYPESAFE_API_KEY` | no | [TypeSafe](https://typesafe.ai) key. Enables Jev to pick the right TMDB match when a title has no exact match, and to resolve titles TMDB search misses (loosened queries, IMDb suggestions). Unset keeps plain first-result matching. |
 | `PORT`           | no       | Port to listen on. Defaults to`7000`.                                                                                                                                                  |
 | `BASE_URL`       | no       | Public base URL used to build the manifest's logo URL (e.g.`https://your-domain`). If unset, relative URLs are used.                                                                     |
 | `REDIS_URL`      | no       | Redis connection string. Powers the library cache and is**required** for Custom Streams — without it, custom streams silently no-op and the library is cached in-process instead. |
@@ -73,8 +74,8 @@ The page itself is gated: `/stats` serves nothing but a token prompt, and every 
 
 Runs as a plain Node server (`npm start` → `index.js`), so it deploys to any container/VM host. Set the environment variables above, and add a Redis instance (e.g. Upstash) if you want Custom Streams and cross-request library caching.
 
-Deployed on [IBM Code Engine](https://www.ibm.com/products/code-engine): every push to `main` triggers a rebuild via the `.github/workflows/deploy-ibm.yml` workflow (buildpacks, no Dockerfile needed).
+Deployed on [Deno Deploy](https://deno.com/deploy): every push to `main` redeploys via `.github/workflows/deploy-deno.yml` (needs the `DENO_DEPLOY_TOKEN` repo secret). Set the environment variables in the Deno Deploy app settings; a local `.env` is not deployed.
 
 ## Security
 
-The manifest URL encodes your API keys (base64url of a small JSON payload) and is the *only* thing standing between someone and your TorBox library — treat it like a password. The server never persists your keys; Redis caching keys off a SHA-256 hash of them rather than the raw values, so nothing readable comes back out even with direct Redis access. The usage counters behind `/stats` follow the same rule: they store that same hash and aggregate counts, never a credential, IP, or title.
+The manifest URL encodes your API keys (base64url of a small JSON payload) and is the *only* thing standing between someone and your TorBox library — treat it like a password. The server never persists your keys; Redis caching keys off a SHA-256 hash of them rather than the raw values, so nothing readable comes back out even with direct Redis access. The usage counters behind `/stats` follow the same rule: they store that same hash and aggregate counts, never a credential, IP, or title. With `TYPESAFE_API_KEY` set, parsed titles, filenames, and TMDB candidate details for ambiguous matches are sent to TypeSafe's API.

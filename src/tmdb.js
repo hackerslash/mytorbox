@@ -5,15 +5,20 @@ const {
   TMDB_BACKDROP_BASE,
   TMDB_CACHE_TTL_SECONDS,
   TMDB_NEGATIVE_CACHE_TTL_SECONDS,
+  TYPESAFE_API_KEY,
+  IMDB_SUGGEST_BASE,
 } = require('./config')
 const { getJson } = require('./httpUtils')
 const redis = require('./redisClient')
 const stats = require('./stats')
+const jev = require('./jev')
 
 const cache = new Map()
 const detailsCache = new Map()
 const findCache = new Map()
 const multiCache = new Map()
+const altCache = new Map()
+const broadCache = new Map()
 async function cachedLookup(ns, l1, l1key, fetchFn) {
   if (l1.has(l1key)) {
     stats.track('tmdb:hit_memory')
@@ -75,10 +80,30 @@ function agreeingOnSequel(results, title) {
   return agreeing.length ? agreeing : results
 }
 
-function pickBest(allResults, title) {
+async function alternativeTitles(kind, id, apiKey) {
+  return cachedLookup('alt', altCache, `${kind}|${id}`, async () => {
+    try {
+      const data = await getJson(`${TMDB_BASE}/${kind}/${id}/alternative_titles?api_key=${apiKey}`)
+      const titles = ((data && (data.titles || data.results)) || []).map((t) => t.title)
+      return [...new Set(titles)].slice(0, 15)
+    } catch {
+      return []
+    }
+  })
+}
+
+async function judge(title, year, kind, candidates, apiKey, filename) {
+  if (!candidates.length) return undefined
+  const alts = await Promise.all(candidates.map((r) => alternativeTitles(kind, r.id, apiKey)))
+  return jev.pickCandidate(title, year, kind, candidates, alts, filename)
+}
+
+async function pickBest(allResults, title, year, kind, apiKey) {
   const results = agreeingOnSequel(allResults, title)
   const want = normalizeTitle(title)
-  return results.find((r) => normalizeTitle(r.title || r.name) === want) || results[0] || null
+  const exact = results.find((r) => normalizeTitle(r.title || r.name) === want)
+  if (exact || !TYPESAFE_API_KEY) return exact || results[0] || null
+  return (await judge(title, year, kind, results.slice(0, jev.MAX_CANDIDATES), apiKey)) || results[0] || null
 }
 
 async function searchOnce(title, year, kind, apiKey) {
@@ -87,7 +112,7 @@ async function searchOnce(title, year, kind, apiKey) {
   if (year) params.set(yearKey, year)
   const url = `${TMDB_BASE}/search/${kind}?${params.toString()}`
   const data = await getJson(url)
-  return pickBest((data && data.results) || [], title)
+  return pickBest((data && data.results) || [], title, year, kind, apiKey)
 }
 
 const STUDIO_PREFIX_RE =
@@ -130,7 +155,7 @@ function titleVariants(title, kind) {
 
 async function search(title, year, kind, apiKey) {
   const key = `${kind}|${title.trim().toLowerCase()}|${year || ''}`
-  return cachedLookup('s2', cache, key, async () => {
+  return cachedLookup(TYPESAFE_API_KEY ? 's3' : 's2', cache, key, async () => {
     const want = normalizeTitle(title)
     let result = await searchOnce(title, year, kind, apiKey)
 
@@ -153,6 +178,44 @@ async function search(title, year, kind, apiKey) {
     }
     return result
   })
+}
+
+function broadQueries(title) {
+  const cleaned = title
+    .replace(/^\S+\.\S+\s+-\s+/, '')
+    .replace(/^\d{1,2}\s+/, '')
+    .replace(/\s+-\s+[a-z]+$/i, '')
+  const queries = new Set([cleaned, ...cleaned.split(/\s+a\s?k\s?a\s+/i)])
+  const words = cleaned.split(/\s+/)
+  for (let n = words.length - 1; n >= Math.max(1, words.length - 3); n--) queries.add(words.slice(0, n).join(' '))
+  return [...queries].filter((q) => q.length > 3)
+}
+
+// Last resort: loosen the query for candidates and let Jev pick one or reject them all.
+async function broadSearch(title, year, filename, kind, apiKey) {
+  if (!TYPESAFE_API_KEY) return null
+  return cachedLookup('broad', broadCache, `${kind}|${title.trim().toLowerCase()}|${year || ''}`, async () => {
+    const pool = new Map()
+    for (const query of broadQueries(title)) {
+      const data = await getJson(`${TMDB_BASE}/search/${kind}?${new URLSearchParams({ api_key: apiKey, query })}`)
+      for (const r of ((data && data.results) || []).slice(0, 4)) pool.set(r.id, r)
+      if (pool.size >= jev.MAX_CANDIDATES) break
+    }
+    const candidates = [...pool.values()].slice(0, jev.MAX_CANDIDATES)
+    return (await judge(title, year, kind, candidates, apiKey, filename)) || imdbSuggestionSearch(title, year, filename, kind, apiKey)
+  })
+}
+
+const IMDB_KINDS = { movie: new Set(['movie', 'tvMovie']), tv: new Set(['tvSeries', 'tvMiniSeries']) }
+
+// IMDb's autocomplete tolerates spellings TMDB search misses ("Fog Hills" -> "Fog Hill").
+async function imdbSuggestionSearch(title, year, filename, kind, apiKey) {
+  const query = broadQueries(title)[0] || title
+  const data = await getJson(`${IMDB_SUGGEST_BASE}/${encodeURIComponent(query.toLowerCase())}.json`).catch(() => null)
+  const suggestions = ((data && data.d) || []).filter((d) => /^tt\d+$/.test(d.id) && IMDB_KINDS[kind].has(d.qid))
+  const found = await Promise.all(suggestions.slice(0, jev.MAX_CANDIDATES).map((d) => findByImdbId(d.id, apiKey)))
+  const candidates = [...new Map(found.filter((f) => f && f.kind === kind).map((f) => [f.result.id, f.result])).values()]
+  return (await judge(title, year, kind, candidates, apiKey, filename)) || null
 }
 
 function posterUrl(result) {
@@ -270,4 +333,4 @@ function clearCache() {
   multiCache.clear()
 }
 
-module.exports = { search, searchMulti, posterUrl, getDetails, findByImdbId, clearCache, normalizeTitle, titleVariants, stripStudioPrefix }
+module.exports = { search, broadSearch, broadQueries, searchMulti, posterUrl, getDetails, findByImdbId, clearCache, normalizeTitle, titleVariants, stripStudioPrefix }

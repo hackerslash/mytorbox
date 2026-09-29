@@ -69,3 +69,11 @@ test('searchMulti keeps only movie/tv results and normalizes them', async () => 
     clearCache()
   }
 })
+
+test('broad search loosens site prefixes, collection indexes, genre tags and spaced AKA', () => {
+  const { broadQueries } = require('../src/tmdb')
+  assert.ok(broadQueries('mkvcinemas.live - Chittagong').includes('Chittagong'))
+  assert.ok(broadQueries('01 The Avengers Assemble - Action').includes('The Avengers'))
+  assert.ok(broadQueries('Nanpakal Nerathu Mayakkam A K A Like An Afternoon Dream').includes('Nanpakal Nerathu Mayakkam'))
+  assert.ok(broadQueries('Vincenzo Secret Report').includes('Vincenzo'))
+})

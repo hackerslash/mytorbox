@@ -4,6 +4,7 @@ const DEFAULT_TORBOX_API_KEY = process.env.TORBOX_API_KEY || null
 const DEFAULT_TMDB_API_KEY = process.env.TMDB_API_KEY || null
 const DEFAULT_RPDB_API_KEY = process.env.RPDB_API_KEY || null
 const DEFAULT_POSTER_URL = process.env.POSTER_URL || null
+const TYPESAFE_API_KEY = process.env.TYPESAFE_API_KEY || null
 
 const BASE_URL = (process.env.BASE_URL || '').replace(/\/$/, '')
 const PORT = parseInt(process.env.PORT || '7000', 10)
@@ -32,6 +33,7 @@ const TORBOX_MAX_PAGES = 50
 // added TMDB entries appear soon, unlike successful lookups which are stable.
 const TMDB_NEGATIVE_CACHE_TTL_SECONDS = 6 * 60 * 60
 const CINEMETA_BASE = 'https://v3-cinemeta.strem.io'
+const IMDB_SUGGEST_BASE = 'https://v2.sg.media-imdb.com/suggestion/x'
 const CINEMETA_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 const CINEMETA_NEGATIVE_CACHE_TTL_SECONDS = 6 * 60 * 60
 const CINEMETA_WARM_CONCURRENCY = 8
@@ -89,6 +91,7 @@ module.exports = {
   DEFAULT_TMDB_API_KEY,
   DEFAULT_RPDB_API_KEY,
   DEFAULT_POSTER_URL,
+  TYPESAFE_API_KEY,
   BASE_URL,
   PORT,
   TORBOX_BASE,
@@ -103,6 +106,7 @@ module.exports = {
   TMDB_CACHE_TTL_SECONDS,
   TMDB_NEGATIVE_CACHE_TTL_SECONDS,
   CINEMETA_BASE,
+  IMDB_SUGGEST_BASE,
   CINEMETA_CACHE_TTL_SECONDS,
   CINEMETA_NEGATIVE_CACHE_TTL_SECONDS,
   CINEMETA_WARM_CONCURRENCY,

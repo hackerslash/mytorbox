@@ -188,6 +188,11 @@ function fingerprintEntries(entriesBySource) {
   return `${parts.length}:${crypto.createHash('sha1').update(parts.join('|')).digest('hex')}`
 }
 
+function sampleFilename(g) {
+  const items = g.items || [...g.episodes.values()][0] || g.unnumbered
+  return items && items[0] ? items[0].filename : null
+}
+
 async function resolveGroups(keysAndGroups, kind, tmdbKey) {
   const results = await mapLimit(keysAndGroups, TMDB_CONCURRENCY, ([, g]) =>
     tmdb.search(g.title, g.year, kind, tmdbKey)
@@ -216,6 +221,20 @@ async function resolveGroups(keysAndGroups, kind, tmdbKey) {
     added.push(recovered[n])
     stats.track(`lib:recovered:${kind}`)
   })
+
+  const stillUnresolved = unresolved.filter((i, n) => !recovered[n])
+  const broad = await mapLimit(stillUnresolved, CINEMETA_SEARCH_CONCURRENCY, (i) => {
+    const g = keysAndGroups[i][1]
+    return tmdb.broadSearch(g.title, g.year, sampleFilename(g), kind, tmdbKey).catch(() => null)
+  })
+  const broadDetails = await fetchDetails(kind, broad, tmdbKey)
+  stillUnresolved.forEach((i, n) => {
+    if (!(detailsOf(broadDetails, broad[n]) || {}).imdbId) return
+    results[i] = broad[n]
+    details.set(broad[n].id, broadDetails.get(broad[n].id))
+    stats.track(`lib:broad:${kind}`)
+  })
+
   if (added.length) {
     for (const [id, value] of await fetchDetails(kind, added, tmdbKey)) details.set(id, value)
   }
