@@ -71,7 +71,7 @@ const statsFlushSeconds = parseInt(process.env.STATS_FLUSH_SECONDS, 10)
 const STATS_FLUSH_MS = (Number.isInteger(statsFlushSeconds) && statsFlushSeconds >= 1 ? statsFlushSeconds : 60) * 1000
 const STATS_USER_THROTTLE_MS = 5 * 60 * 1000
 const STATS_SUMMARY_TTL_SECONDS = 60
-const STATS_SCAN_LIMIT = 50000
+const STATS_SCAN_LIMIT = 150000
 const STATS_HOURLY_TTL_SECONDS = 3 * 24 * 60 * 60
 const STATS_TOP_LIBRARIES = 10
 const STATS_UA_SAMPLE_LIMIT = 40
