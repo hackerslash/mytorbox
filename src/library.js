@@ -628,7 +628,13 @@ async function getLibrary(torboxKey, tmdbKey, force = false) {
     }
     stats.track(force ? 'lib:force' : 'lib:revalidate')
 
-    const entriesBySource = await fetchEntriesBySource(torboxKey, force)
+    const entriesBySource = await fetchEntriesBySource(torboxKey, force).catch((err) => {
+      if (force || !fresh || !fresh.lib) throw err
+      stats.track('lib:revalidate_error')
+      console.warn('library: revalidate failed, serving cached library:', err.message)
+      return null
+    })
+    if (!entriesBySource) return fresh.lib
     const fingerprint = fingerprintEntries(entriesBySource)
 
     const tip = tipEntries(entriesBySource)
