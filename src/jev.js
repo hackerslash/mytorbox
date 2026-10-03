@@ -45,7 +45,7 @@ function buildRequest(title, year, kind, candidates, alts = [], filename) {
   }
 }
 
-// undefined = no pick (Jev chose none, or the call failed).
+// null = Jev chose none; undefined = the call failed.
 async function pickCandidate(title, year, kind, candidates, alts, filename) {
   try {
     const data = await getJson('https://api.typesafe.ai/v1/systemone', {
@@ -55,7 +55,7 @@ async function pickCandidate(title, year, kind, candidates, alts, filename) {
     }, 2)
     const choice = data.answers.match.choice
     stats.track(choice === NONE ? 'jev:none' : 'jev:pick')
-    return choice === NONE ? undefined : candidates[Number(choice.slice(1))]
+    return choice === NONE ? null : candidates[Number(choice.slice(1))]
   } catch {
     stats.track('jev:error')
     return undefined

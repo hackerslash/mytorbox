@@ -32,6 +32,7 @@ const TORBOX_MAX_PAGES = 50
 // A genuine "no TMDB match" (or a transient error) is cached only briefly so newly
 // added TMDB entries appear soon, unlike successful lookups which are stable.
 const TMDB_NEGATIVE_CACHE_TTL_SECONDS = 6 * 60 * 60
+const TMDB_REJECTED_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 const CINEMETA_BASE = 'https://v3-cinemeta.strem.io'
 const IMDB_SUGGEST_BASE = 'https://v2.sg.media-imdb.com/suggestion/x'
 const CINEMETA_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
@@ -105,6 +106,7 @@ module.exports = {
   PARSE_CACHE_TTL_SECONDS,
   TMDB_CACHE_TTL_SECONDS,
   TMDB_NEGATIVE_CACHE_TTL_SECONDS,
+  TMDB_REJECTED_CACHE_TTL_SECONDS,
   CINEMETA_BASE,
   IMDB_SUGGEST_BASE,
   CINEMETA_CACHE_TTL_SECONDS,

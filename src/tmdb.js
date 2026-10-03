@@ -5,6 +5,7 @@ const {
   TMDB_BACKDROP_BASE,
   TMDB_CACHE_TTL_SECONDS,
   TMDB_NEGATIVE_CACHE_TTL_SECONDS,
+  TMDB_REJECTED_CACHE_TTL_SECONDS,
   TYPESAFE_API_KEY,
   IMDB_SUGGEST_BASE,
 } = require('./config')
@@ -40,11 +41,11 @@ async function cachedLookup(ns, l1, l1key, fetchFn) {
   }
   const value = await fetchFn()
   stats.track('tmdb:fetch')
-  if (value == null) stats.track('tmdb:no_match')
+  if (!value) stats.track('tmdb:no_match')
   l1.set(l1key, value)
   if (redis) {
     // Cache "no match"/errors only briefly so late-arriving TMDB entries surface soon.
-    const ttl = value == null ? TMDB_NEGATIVE_CACHE_TTL_SECONDS : TMDB_CACHE_TTL_SECONDS
+    const ttl = value === false ? TMDB_REJECTED_CACHE_TTL_SECONDS : value == null ? TMDB_NEGATIVE_CACHE_TTL_SECONDS : TMDB_CACHE_TTL_SECONDS
     try {
       await redis.set(rk, JSON.stringify(value), 'EX', ttl)
     } catch {
@@ -93,7 +94,7 @@ async function alternativeTitles(kind, id, apiKey) {
 }
 
 async function judge(title, year, kind, candidates, apiKey, filename) {
-  if (!candidates.length) return undefined
+  if (!candidates.length) return null
   const alts = await Promise.all(candidates.map((r) => alternativeTitles(kind, r.id, apiKey)))
   return jev.pickCandidate(title, year, kind, candidates, alts, filename)
 }
@@ -202,7 +203,12 @@ async function broadSearch(title, year, filename, kind, apiKey) {
       if (pool.size >= jev.MAX_CANDIDATES) break
     }
     const candidates = [...pool.values()].slice(0, jev.MAX_CANDIDATES)
-    return (await judge(title, year, kind, candidates, apiKey, filename)) || imdbSuggestionSearch(title, year, filename, kind, apiKey)
+    const picked = await judge(title, year, kind, candidates, apiKey, filename)
+    if (picked) return picked
+    const suggested = await imdbSuggestionSearch(title, year, filename, kind, apiKey)
+    if (suggested) return suggested
+    // false = Jev ruled out every candidate, cached longer than a failed call (null).
+    return picked === null && suggested === null ? false : null
   })
 }
 
@@ -215,7 +221,7 @@ async function imdbSuggestionSearch(title, year, filename, kind, apiKey) {
   const suggestions = ((data && data.d) || []).filter((d) => /^tt\d+$/.test(d.id) && IMDB_KINDS[kind].has(d.qid))
   const found = await Promise.all(suggestions.slice(0, jev.MAX_CANDIDATES).map((d) => findByImdbId(d.id, apiKey)))
   const candidates = [...new Map(found.filter((f) => f && f.kind === kind).map((f) => [f.result.id, f.result])).values()]
-  return (await judge(title, year, kind, candidates, apiKey, filename)) || null
+  return judge(title, year, kind, candidates, apiKey, filename)
 }
 
 function posterUrl(result) {
