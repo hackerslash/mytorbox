@@ -203,7 +203,7 @@ async function resolveGroups(keysAndGroups, kind, tmdbKey) {
   results.forEach((res, i) => {
     if (!res || !(detailsOf(details, res) || {}).imdbId) unresolved.push(i)
   })
-  if (!unresolved.length) return { results, details }
+  if (!unresolved.length) return { keys: keysAndGroups, results, details }
 
   const cinemetaType = kind === 'movie' ? 'movie' : 'series'
   const recovered = await mapLimit(unresolved, CINEMETA_SEARCH_CONCURRENCY, async (i) => {
@@ -227,8 +227,14 @@ async function resolveGroups(keysAndGroups, kind, tmdbKey) {
     const g = keysAndGroups[i][1]
     return tmdb.broadSearch(g.title, g.year, sampleFilename(g), kind, tmdbKey).catch(() => null)
   })
-  const broadDetails = await fetchDetails(kind, broad, tmdbKey)
+  const extras = new Set()
+  const broadDetails = await fetchDetails(kind, broad.map((b) => (b === tmdb.EXTRA ? null : b)), tmdbKey)
   stillUnresolved.forEach((i, n) => {
+    if (broad[n] === tmdb.EXTRA) {
+      extras.add(i)
+      stats.track(`lib:extra:${kind}`)
+      return
+    }
     if (!(detailsOf(broadDetails, broad[n]) || {}).imdbId) return
     results[i] = broad[n]
     details.set(broad[n].id, broadDetails.get(broad[n].id))
@@ -238,7 +244,8 @@ async function resolveGroups(keysAndGroups, kind, tmdbKey) {
   if (added.length) {
     for (const [id, value] of await fetchDetails(kind, added, tmdbKey)) details.set(id, value)
   }
-  return { results, details }
+  const keep = (_, i) => !extras.has(i)
+  return { keys: keysAndGroups.filter(keep), results: results.filter(keep), details }
 }
 
 function groupWorkItems(workItems) {
@@ -367,11 +374,10 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
 
   const { movieGroups, seriesGroups } = groupWorkItems(workItems)
 
-  const movieKeys = [...movieGroups.entries()]
-  const seriesKeys = [...seriesGroups.entries()]
-
-  const { results: movieResults, details: movieDetails } = await resolveGroups(movieKeys, 'movie', tmdbKey)
-  const { results: seriesResults, details: seriesDetails } = await resolveGroups(seriesKeys, 'tv', tmdbKey)
+  const { keys: movieKeys, results: movieResults, details: movieDetails } =
+    await resolveGroups([...movieGroups.entries()], 'movie', tmdbKey)
+  const { keys: seriesKeys, results: seriesResults, details: seriesDetails } =
+    await resolveGroups([...seriesGroups.entries()], 'tv', tmdbKey)
 
   const movieImdbIds = movieResults.map((res) => (detailsOf(movieDetails, res) || {}).imdbId || null)
   const seriesImdbIds = seriesResults.map((res) => (detailsOf(seriesDetails, res) || {}).imdbId || null)
@@ -446,7 +452,7 @@ function redisKeyFor(cacheKey) {
 }
 
 function parseCacheKeyFor(cacheKey) {
-  return `pc2:${cacheKey}`
+  return `pc3:${cacheKey}`
 }
 
 function partKeyFor(cacheKey, index) {
@@ -697,6 +703,7 @@ async function clearCache() {
         ...(await redis.keys('libp:*')),
         ...(await redis.keys('pc:*')),
         ...(await redis.keys('pc2:*')),
+        ...(await redis.keys('pc3:*')),
         ...(await redis.keys('tmdb:*')),
         ...(await redis.keys('cm:*')),
         ...(await redis.keys('cms:*')),

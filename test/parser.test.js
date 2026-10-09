@@ -322,3 +322,14 @@ for (const [filename, title, season, episodes] of REAL_SERIES) {
     assert.deepEqual(w.episodes, episodes)
   })
 }
+
+test('a resolution glued to a source tag is not read as an episode', () => {
+  const w = parseOne('[DB]Paprika_-_(Dual Audio_10bit_BD1080p_x265).mkv')
+  assert.equal(w.title, 'Paprika')
+  assert.equal(w.isEpisode, false)
+})
+
+test('a lone 3-4 digit number is not split into season and episode', () => {
+  const w = parseOne('Майкл 1080.mkv')
+  assert.equal(w.isEpisode, false)
+})

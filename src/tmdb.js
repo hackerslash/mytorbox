@@ -93,8 +93,9 @@ async function alternativeTitles(kind, id, apiKey) {
   })
 }
 
+// With a filename and no candidates, Jev is still asked so it can mark the file as an extra.
 async function judge(title, year, kind, candidates, apiKey, filename) {
-  if (!candidates.length) return null
+  if (!candidates.length && !filename) return null
   const alts = await Promise.all(candidates.map((r) => alternativeTitles(kind, r.id, apiKey)))
   return jev.pickCandidate(title, year, kind, candidates, alts, filename)
 }
@@ -221,6 +222,7 @@ async function imdbSuggestionSearch(title, year, filename, kind, apiKey) {
   const suggestions = ((data && data.d) || []).filter((d) => /^tt\d+$/.test(d.id) && IMDB_KINDS[kind].has(d.qid))
   const found = await Promise.all(suggestions.slice(0, jev.MAX_CANDIDATES).map((d) => findByImdbId(d.id, apiKey)))
   const candidates = [...new Map(found.filter((f) => f && f.kind === kind).map((f) => [f.result.id, f.result])).values()]
+  if (!candidates.length) return null
   return judge(title, year, kind, candidates, apiKey, filename)
 }
 
@@ -339,4 +341,4 @@ function clearCache() {
   multiCache.clear()
 }
 
-module.exports = { search, broadSearch, broadQueries, searchMulti, posterUrl, getDetails, findByImdbId, clearCache, normalizeTitle, titleVariants, stripStudioPrefix }
+module.exports = { EXTRA: jev.EXTRA, search, broadSearch, broadQueries, searchMulti, posterUrl, getDetails, findByImdbId, clearCache, normalizeTitle, titleVariants, stripStudioPrefix }

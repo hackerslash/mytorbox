@@ -48,3 +48,33 @@ test('broad search returns false when Jev rejects every candidate, null when the
   global.fetch = route(400)
   assert.equal(await broadSearch('Other Junk', null, 'junk.mkv', 'movie', 'k'), null)
 })
+
+test('with a filename, Jev can mark the file as bonus material', async () => {
+  const { EXTRA } = require('../src/jev')
+  global.fetch = async (url, opts) => {
+    assert.deepEqual(Object.keys(JSON.parse(opts.body).questions.match.criteria), ['c0', 'c1', 'none', 'extra'])
+    return { ok: true, status: 200, json: async () => ({ answers: { match: { choice: 'extra' } } }) }
+  }
+  assert.equal(await pickCandidate('Making of Dune', null, 'movie', results, [], 'Making of Dune.mkv'), EXTRA)
+})
+
+test('the library drops groups Jev marks as extras and keeps unmatched works', async () => {
+  const { buildLibrary } = require('../src/library')
+  global.fetch = async (url, opts) => {
+    const json = (body) => ({ ok: true, status: 200, json: async () => body })
+    if (url.includes('typesafe')) {
+      const { filename = '' } = JSON.parse(opts.body).state
+      return json({ answers: { match: { choice: filename.startsWith('Making of') ? 'extra' : 'none' } } })
+    }
+    if (url.includes('/search/')) return json({ results: url.includes('Making') ? results : [] })
+    if (url.includes('alternative_titles')) return json({ titles: [] })
+    return json({})
+  }
+  const file = (id, name) => ({ id, name, created_at: '2026-01-01', files: [{ id: 0, short_name: name, size: 2 * 1024 ** 3 }] })
+  const lib = await buildLibrary('tb', 'tmdb', {
+    torrents: [file(1, 'Making of Dune.mkv'), file(2, 'Obscure Home Film 1971.mkv')],
+    webdl: [],
+    usenet: [],
+  })
+  assert.deepEqual(lib.movies.map((m) => m.name), ['Obscure Home Film'])
+})

@@ -11,6 +11,8 @@ const DASH_OR_DATE_RE =
   /[\s._-][-–—][\s._-]*\d{1,3}(?=$|[\s._)\]])|\b(?:19|20)\d{2}[.\-]\d{2}[.\-]\d{2}\b/
 const LEADING_LIST_NUMBER_RE = /^\d{1,3}\)/
 const YEAR_RE = /\b(?:19|20)\d{2}\b/
+// Guessit splits a lone 3-4 digit number into season+episode ("Майкл 1080" -> S10E80).
+const LONE_LONG_NUMBER_RE = /(?:^|[\s._-])\d{3,4}(?=$|[\s._-])/
 
 function credibleEpisode(name) {
   return EPISODE_MARKER_RE.test(name) || DASH_OR_DATE_RE.test(name)
@@ -19,7 +21,7 @@ function credibleEpisode(name) {
 function demoteFalseEpisode(merged, name, guessit, ptt) {
   if (!merged.isEpisode || !guessit || !guessit.isEpisode) return merged
   if (!ptt || ptt.isEpisode || credibleEpisode(name)) return merged
-  if (!YEAR_RE.test(name) && !LEADING_LIST_NUMBER_RE.test(name.trim())) return merged
+  if (!YEAR_RE.test(name) && !LEADING_LIST_NUMBER_RE.test(name.trim()) && !LONE_LONG_NUMBER_RE.test(name)) return merged
   return { ...merged, isEpisode: false, season: null, episodes: [] }
 }
 

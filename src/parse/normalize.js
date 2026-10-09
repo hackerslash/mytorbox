@@ -12,7 +12,7 @@ const JUNK_FILE_PATTERNS = [
 
 const AUDIO_CHANNELS_RE =
   /\b(DDP?|EAC3|AC3|DTS(?:[-.]?HD)?(?:[-.]?MA)?|TrueHD|THD|AAC|FLAC|LPCM|Opus|Atmos)[\s._-]*[2567][01]\b/gi
-const GLUED_RESOLUTION_RE = /\b(4k|uhd)[a-z]*?(?:2160|1080)\b/gi
+const GLUED_RESOLUTION_RE = /\b(4k|uhd)[a-z]*?(?:2160|1080)\b|(?<![a-z0-9])(bd|hd|web|dvd)(?:2160|1080|720|576|480)[pi](?![a-z0-9])/gi
 const GLUED_EPISODE_MARKER_RE = /([Ss]\d{1,2}[Ee]\d{1,3})(?=[A-Za-z])/g
 const REPEATED_YEAR_RE = /\b((?:19|20)\d{2})[\s._-]+\1\b/g
 const TECH_TOKEN =
@@ -49,7 +49,7 @@ function stripTechnicalTokens(name) {
   return name
     .replace(REPEATED_YEAR_RE, '$1')
     .replace(AUDIO_CHANNELS_RE, '$1')
-    .replace(GLUED_RESOLUTION_RE, '$1')
+    .replace(GLUED_RESOLUTION_RE, '$1$2')
     .replace(GLUED_EPISODE_MARKER_RE, '$1.')
 }
 
