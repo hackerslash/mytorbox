@@ -147,3 +147,16 @@ test('hashlib entries carry size, and the claimable URL only for webdl', () => {
   assert.deepEqual(hashlibEntry('torrents', entry), { name: 'X', size: 10, files: ['x.mkv'] })
   assert.deepEqual(hashlibEntry('webdl', entry), { name: 'X', size: 10, files: ['x.mkv'], url: 'https://u' })
 })
+
+test('a group whose title is only an infohash is dropped from the catalog', async () => {
+  const { buildLibrary } = require('../src/library')
+  const hash = '5bf938cdc5198159180e3f78de00e0b33e02f333'
+  global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ results: [] }) })
+  const lib = await buildLibrary('tb', 'tmdb', {
+    torrents: [{ id: 1, name: hash, created_at: '2026-01-01', files: [{ id: 0, short_name: '01 AvengersDoomsday_TSR1.1_3840x1600_HEVC.mkv', size: 2 * 1024 ** 3 }] }],
+    webdl: [],
+    usenet: [],
+  })
+  assert.deepEqual(lib.series, [])
+  assert.deepEqual(lib.movies, [])
+})

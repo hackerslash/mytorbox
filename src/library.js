@@ -50,6 +50,8 @@ function posterUrlFor(tmdbRes, kind, provider, imdbId = null) {
 
 const TMDB_ID_IN_ID_RE = /^tb:(?:movie|series):tmdb-(\d+)(?::|$)/
 const IMDB_ID_RE = /^tt\d+$/
+// A title that is a bare infohash means TorBox had no name and no file parsed to a title.
+const HASH_TITLE_RE = /^[0-9a-f]{32,40}$/i
 
 function extraFields(details) {
   const extras = {}
@@ -373,6 +375,15 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
   stats.track('parse:guessit_skipped', guessitSkipped)
 
   const { movieGroups, seriesGroups } = groupWorkItems(workItems)
+
+  for (const groups of [movieGroups, seriesGroups]) {
+    for (const [key, g] of groups) {
+      if (HASH_TITLE_RE.test(g.title)) {
+        groups.delete(key)
+        stats.track('lib:hash_title_dropped')
+      }
+    }
+  }
 
   const { keys: movieKeys, results: movieResults, details: movieDetails } =
     await resolveGroups([...movieGroups.entries()], 'movie', tmdbKey)
