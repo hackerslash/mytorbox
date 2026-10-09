@@ -3,7 +3,7 @@ process.env.REDIS_URL = ''
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
-const { groupWorkItems, seriesVideos } = require('../src/library')
+const { groupWorkItems, seriesVideos, hashlibEntry } = require('../src/library')
 
 function episodeItem(filename, season, episodes) {
   return {
@@ -140,4 +140,10 @@ test('movies group by title and year', () => {
   const { movieGroups } = groupWorkItems([movie('a.mkv', 1995), movie('b.mkv', 1995), movie('c.mkv', 1999)])
   assert.deepEqual([...movieGroups.keys()], ['toy-story-1995', 'toy-story-1999'])
   assert.equal(movieGroups.get('toy-story-1995').items.length, 2)
+})
+
+test('hashlib entries carry size, and the claimable URL only for webdl', () => {
+  const entry = { name: 'X', size: 10, original_url: 'https://u', files: [{ short_name: 'x.mkv', name: 'd/x.mkv' }] }
+  assert.deepEqual(hashlibEntry('torrents', entry), { name: 'X', size: 10, files: ['x.mkv'] })
+  assert.deepEqual(hashlibEntry('webdl', entry), { name: 'X', size: 10, files: ['x.mkv'], url: 'https://u' })
 })
