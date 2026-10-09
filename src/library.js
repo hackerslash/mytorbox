@@ -319,8 +319,27 @@ function seriesVideos(sid, g) {
   return { videos, streams }
 }
 
+// Global, user-agnostic infohash -> filenames map. HSETNX keeps the first sighting and skips rewrites.
+async function recordHashes(bySource) {
+  if (!redis) return
+  try {
+    const pipe = redis.pipeline()
+    for (const source of SOURCES) {
+      for (const entry of bySource[source] || []) {
+        if (!entry.hash) continue
+        const files = (entry.files || []).map((f) => f.short_name || f.name).filter(Boolean)
+        pipe.hsetnx('hashlib', String(entry.hash).toLowerCase(), JSON.stringify({ name: entry.name, files }))
+      }
+    }
+    await pipe.exec()
+  } catch (err) {
+    console.warn('library: hashlib write failed:', err.message)
+  }
+}
+
 async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey = null) {
   const bySource = entriesBySource || (await fetchEntriesBySource(torboxKey))
+  recordHashes(bySource)
 
   const resolver = makeParseResolver(await loadParseCache(cacheKey))
   const workItems = []
