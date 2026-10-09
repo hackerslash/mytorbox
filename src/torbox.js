@@ -1,7 +1,8 @@
 const { TORBOX_BASE, VIDEO_EXTENSIONS, TORBOX_PAGE_LIMIT, TORBOX_MAX_PAGES } = require('./config')
 const { getJson } = require('./httpUtils')
 
-const SOURCES = ['torrents', 'webdl']
+const SOURCES = ['torrents', 'webdl', 'usenet']
+const ID_PARAMS = { torrents: 'torrent_id', webdl: 'web_id', usenet: 'usenet_id' }
 
 function headers(apiKey) {
   return {
@@ -10,12 +11,22 @@ function headers(apiKey) {
   }
 }
 
+// A usenet 4xx (e.g. a plan without usenet) reads as empty so it can't fail the whole library.
+async function getList(source, url, apiKey) {
+  try {
+    return await getJson(url, { headers: headers(apiKey) })
+  } catch (err) {
+    if (source === 'usenet' && /^HTTP 4\d\d /.test(err.message)) return null
+    throw err
+  }
+}
+
 async function fetchMylist(source, apiKey, { bypassCache = false } = {}) {
   const all = []
   for (let page = 0; page < TORBOX_MAX_PAGES; page++) {
     const offset = page * TORBOX_PAGE_LIMIT
     const url = `${TORBOX_BASE}/${source}/mylist?bypass_cache=${bypassCache}&limit=${TORBOX_PAGE_LIMIT}&offset=${offset}`
-    const data = await getJson(url, { headers: headers(apiKey) })
+    const data = await getList(source, url, apiKey)
     const items = (data && data.data) || []
     all.push(...items)
     if (items.length < TORBOX_PAGE_LIMIT) break
@@ -25,7 +36,7 @@ async function fetchMylist(source, apiKey, { bypassCache = false } = {}) {
 
 async function fetchNewest(source, apiKey) {
   const url = `${TORBOX_BASE}/${source}/mylist?bypass_cache=false&limit=1&offset=0`
-  const data = await getJson(url, { headers: headers(apiKey) })
+  const data = await getList(source, url, apiKey)
   const items = (data && data.data) || []
   return items.length ? items[0] : null
 }
@@ -38,8 +49,7 @@ function isVideo(filename) {
 }
 
 function buildStreamUrl(source, itemId, fileId, apiKey) {
-  const idParam = source === 'torrents' ? 'torrent_id' : 'web_id'
-  return `${TORBOX_BASE}/${source}/requestdl?token=${apiKey}&${idParam}=${itemId}&file_id=${fileId}&redirect=true`
+  return `${TORBOX_BASE}/${source}/requestdl?token=${apiKey}&${ID_PARAMS[source]}=${itemId}&file_id=${fileId}&redirect=true`
 }
 
 module.exports = { SOURCES, fetchMylist, fetchNewest, isVideo, buildStreamUrl }

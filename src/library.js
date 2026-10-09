@@ -319,8 +319,7 @@ function seriesVideos(sid, g) {
   return { videos, streams }
 }
 
-// Webdl hashes are md5(original_url) and TorBox claims a cached webdl from the URL alone (even
-// once expired), so the URL is what makes a webdl entry reusable.
+// A webdl hash is md5(original_url), and TorBox claims a cached webdl from that URL even after it expires.
 function hashlibEntry(source, entry) {
   const files = (entry.files || []).map((f) => f.short_name || f.name).filter(Boolean)
   const value = { name: entry.name, size: entry.size, files }
@@ -328,15 +327,14 @@ function hashlibEntry(source, entry) {
   return value
 }
 
-// Global, user-agnostic hash -> entry map. HSET (not HSETNX) so entries written in an older shape
-// heal on the next rebuild of any library containing them.
+// HSET, not HSETNX, so entries stored in an older shape get rewritten.
 async function recordHashes(bySource) {
   if (!redis) return
   try {
     const pipe = redis.pipeline()
-    for (const source of SOURCES) {
+    for (const source of ['torrents', 'webdl']) {
       for (const entry of bySource[source] || []) {
-        // Incomplete items report size -1 and no files; writing them would clobber a good entry.
+        // Incomplete items have size -1 and no files and would overwrite a complete entry.
         if (!entry.hash || !(entry.files || []).length) continue
         pipe.hset('hashlib', String(entry.hash).toLowerCase(), JSON.stringify(hashlibEntry(source, entry)))
       }
