@@ -336,19 +336,32 @@ function hashlibEntry(source, entry) {
   return value
 }
 
+// ponytail: per-process memo, so each instance rewrites an unchanged entry once per restart.
+const recordedHashes = new Set()
+const MAX_RECORDED_HASHES = 50000
+
 // HSET, not HSETNX, so entries stored in an older shape get rewritten.
 async function recordHashes(bySource) {
   if (!redis) return
   try {
     const pipe = redis.pipeline()
+    const written = []
     for (const source of ['torrents', 'webdl']) {
       for (const entry of bySource[source] || []) {
         // Incomplete items have size -1 and no files and would overwrite a complete entry.
         if (!entry.hash || !(entry.files || []).length) continue
-        pipe.hset('hashlib', String(entry.hash).toLowerCase(), JSON.stringify(hashlibEntry(source, entry)))
+        const hash = String(entry.hash).toLowerCase()
+        const value = JSON.stringify(hashlibEntry(source, entry))
+        const memo = hash + crypto.createHash('sha1').update(value).digest('base64')
+        if (recordedHashes.has(memo)) continue
+        pipe.hset('hashlib', hash, value)
+        written.push(memo)
       }
     }
+    if (!written.length) return
     await pipe.exec()
+    if (recordedHashes.size + written.length > MAX_RECORDED_HASHES) recordedHashes.clear()
+    for (const memo of written) recordedHashes.add(memo)
   } catch (err) {
     console.warn('library: hashlib write failed:', err.message)
   }
