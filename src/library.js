@@ -460,6 +460,38 @@ async function buildLibrary(torboxKey, tmdbKey, entriesBySource = null, cacheKey
 const memCache = new Map() // sha256(`${torboxKey}|${tmdbKey}|`) -> { record, storedAt }
 const buildLocks = new Map()
 
+// Decoded libraries kept in front of Redis, budgeted by their gzipped size (~10x that in heap).
+// Kept no longer than the probe interval, so another instance's rebuild is seen as soon as it is today.
+// ponytail: per-instance LRU; cache/clear only empties the instance that served it.
+const hotCache = new Map() // cacheKey -> { record, size, storedAt }
+let hotBytes = 0
+const HOT_CACHE_MAX_BYTES = 4 * 1024 * 1024
+
+function hotDrop(cacheKey) {
+  const entry = hotCache.get(cacheKey)
+  if (!entry) return null
+  hotCache.delete(cacheKey)
+  hotBytes -= entry.size
+  return entry
+}
+
+function hotGet(cacheKey) {
+  const entry = hotDrop(cacheKey)
+  if (!entry || Date.now() - entry.storedAt >= LIBRARY_PROBE_INTERVAL_MS) return null
+  hotCache.set(cacheKey, entry)
+  hotBytes += entry.size
+  return entry.record
+}
+
+function hotSet(cacheKey, record, size) {
+  const prev = hotDrop(cacheKey)
+  if (size == null) size = prev && prev.size
+  if (!size || size > HOT_CACHE_MAX_BYTES) return
+  hotCache.set(cacheKey, { record, size, storedAt: Date.now() })
+  hotBytes += size
+  while (hotBytes > HOT_CACHE_MAX_BYTES) hotDrop(hotCache.keys().next().value)
+}
+
 // Redis/memory keys are hashed rather than built from the raw keys directly —
 // otherwise anyone with Redis access could read every user's API keys straight
 // out of the key names (`redis-cli KEYS lib:*`, MONITOR, RDB backups, etc).
@@ -535,8 +567,13 @@ function isEnvelope(buf) {
   return buf.length >= ENVELOPE_PREFIX.length && buf.subarray(0, ENVELOPE_PREFIX.length).toString() === ENVELOPE_PREFIX
 }
 
-async function getCachedRecord(cacheKey) {
+async function getCachedRecord(cacheKey, skipHot = false) {
   if (redis) {
+    const hot = !skipHot && hotGet(cacheKey)
+    if (hot) {
+      stats.track('lib:hit_hot')
+      return hot
+    }
     try {
       const raw = await redis.getBuffer(redisKeyFor(cacheKey))
       if (!raw) return null
@@ -549,7 +586,10 @@ async function getCachedRecord(cacheKey) {
         stats.track('lib:parts_missing')
         return null
       }
-      return { ...envelope, lib: unpackValue(Buffer.concat(chunks)) }
+      const packed = Buffer.concat(chunks)
+      const record = { ...envelope, lib: unpackValue(packed) }
+      hotSet(cacheKey, record, packed.length)
+      return record
     } catch (err) {
       console.warn('library: redis get failed, treating as cache miss:', err.message)
       return null
@@ -580,6 +620,7 @@ async function setCachedRecord(cacheKey, record) {
       for (let i = parts.length; i < MAX_CACHE_PARTS; i++) tail.del(partKeyFor(cacheKey, i))
       tail.set(redisKeyFor(cacheKey), envelopeValue(record, parts.length), 'EX', LIBRARY_HARD_TTL_SECONDS)
       await tail.exec()
+      hotSet(cacheKey, { ...record, parts: parts.length }, parts.reduce((n, p) => n + p.length, 0))
       if (parts.length > 1) stats.track('lib:chunked')
       return
     } catch (err) {
@@ -606,6 +647,7 @@ async function touchCachedRecord(cacheKey, record) {
     for (let i = 0; i < record.parts; i++) touch.expire(partKeyFor(cacheKey, i), LIBRARY_HARD_TTL_SECONDS)
     touch.set(redisKeyFor(cacheKey), envelopeValue(record, record.parts), 'EX', LIBRARY_HARD_TTL_SECONDS)
     await touch.exec()
+    hotSet(cacheKey, record)
   } catch (err) {
     console.warn('library: redis touch failed:', err.message)
   }
@@ -678,7 +720,7 @@ async function getLibrary(torboxKey, tmdbKey, force = false) {
   // most one TorBox fetch / rebuild.
   const prevLock = buildLocks.get(cacheKey) || Promise.resolve()
   const run = prevLock.then(async () => {
-    const fresh = await getCachedRecord(cacheKey)
+    const fresh = await getCachedRecord(cacheKey, true)
     if (!force && fresh && fresh.lib && Date.now() - fresh.validatedAt < LIBRARY_PROBE_INTERVAL_MS) {
       stats.track('lib:hit_coalesced')
       return fresh.lib
@@ -720,6 +762,8 @@ async function getLibrary(torboxKey, tmdbKey, force = false) {
 
 async function clearCache() {
   memCache.clear()
+  hotCache.clear()
+  hotBytes = 0
   if (redis) {
     try {
       const all = [
