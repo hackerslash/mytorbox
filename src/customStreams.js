@@ -103,7 +103,8 @@ async function addCustomStream(torboxKey, tmdbKey, entry) {
 
     await redis.set(entryKey(uKey, id), JSON.stringify(stored), 'EX', ttlSeconds)
     await redis.zadd(idx, expiresAt, id)
-    await redis.expire(idx, ttlSeconds + 60)
+    // The index must outlive every entry, including earlier entries with longer TTLs.
+    await redis.expire(idx, Math.ceil(CUSTOM_STREAM_MAX_TTL_MS / 1000) + 60)
 
     stats.track('custom:added')
     stats.track(`custom:added:${entry.type}`)
